@@ -81,13 +81,17 @@ class VideoAutoPipeline:
         self.yt_uploader     = YouTubeUploader(self.youtube_creds)
         self.scheduler       = VideoScheduler()
 
-    # ─── Paso 1: Analizar tendencias ──────────────────────────
-    def step_1_get_trend(self) -> dict:
-        logger.info("═══ PASO 1: Analizando tendencias actuales ═══")
-        trend_data = self.trend_analyzer.get_trending_content()
-        logger.info(f"Tema encontrado: {trend_data.get('topic', 'N/A')}")
-        logger.info(f"Formato:         {trend_data.get('format', 'N/A')}")
-        logger.info(f"Publicar a las:  {trend_data.get('publish_time', 'N/A')}")
+    # ─── Paso 1: Obtener datos de tendencia ───────────────────
+    def step_1_get_trend(self, external_trend_data: dict = None) -> dict:
+        if external_trend_data:
+            logger.info("═══ PASO 1: Usando datos de tendencia externos ═══")
+            trend_data = external_trend_data
+        else:
+            logger.info("═══ PASO 1: Analizando tendencias actuales ═══")
+            trend_data = self.trend_analyzer.get_trending_content()
+        logger.info(f"Tema encontrado: {trend_data.get('tema_recomendado', 'N/A')}")
+        logger.info(f"Formato:         {trend_data.get('formato_sugerido', 'N/A')}")
+        logger.info(f"Publicar a las:  {trend_data.get('hora_optima_publicacion', 'N/A')}")
         return trend_data
 
     # ─── Paso 2: Generar guion ────────────────────────────────
@@ -181,7 +185,10 @@ class VideoAutoPipeline:
         return video_url
 
     # ─── Pipeline Completo ────────────────────────────────────
-    def run_full_pipeline(self) -> dict:
+    def run_full_pipeline_with_data(self, trend_data: dict) -> dict:
+        return self.run_full_pipeline(external_trend_data=trend_data)
+
+    def run_full_pipeline(self, external_trend_data: dict = None) -> dict:
         """
         Ejecuta el pipeline completo de principio a fin.
         Retorna un resumen del resultado.
@@ -201,7 +208,7 @@ class VideoAutoPipeline:
 
         try:
             # Paso 1: Tendencias
-            trend_data = self.step_1_get_trend()
+            trend_data = self.step_1_get_trend(external_trend_data)
             result["trend_data"] = trend_data
             result["steps_completed"].append("trend_analysis")
 
@@ -278,7 +285,7 @@ def run_scheduled():
 
 # ─── Entrypoint ───────────────────────────────────────────────
 if __name__ == "__main__":
-    mode = os.getenv("RUN_MODE", "once").lower()
+    mode = os.getenv("RUN_MODE", "server").lower()
 
     if mode == "scheduled":
         run_scheduled()

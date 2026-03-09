@@ -66,28 +66,35 @@ class PipelineHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         """Maneja requests POST."""
-        if self.path == "/run":
-            # Trigger manual del pipeline
-            api_key = self.headers.get("X-API-Key", "")
-            expected_key = os.getenv("API_SECRET_KEY", "change-me-secret")
+        if self.path == "/trigger-video": # Nuevo endpoint para recibir JSON
+            # Recibir JSON y disparar pipeline
 
-            if api_key != expected_key:
-                self._respond(401, {"error": "Unauthorized"})
-                return
 
             # Ejecutar pipeline en thread separado
-            if self.pipeline_ref:
-                thread = threading.Thread(
-                    target=self.pipeline_ref.run_full_pipeline,
-                    daemon=True
-                )
-                thread.start()
-                self._respond(202, {
-                    "message": "Pipeline iniciado",
-                    "timestamp": datetime.now().isoformat(),
-                })
-            else:
-                self._respond(503, {"error": "Pipeline no disponible"})
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                trend_data = json.loads(post_data.decode('utf-8'))
+
+                if self.pipeline_ref:
+                    thread = threading.Thread(
+                        target=self.pipeline_ref.run_full_pipeline_with_data,
+                        args=(trend_data,),
+                        daemon=True
+                    )
+                    thread.start()
+                    self._respond(202, {
+                        "message": "Pipeline de video iniciado con datos recibidos",
+                        "timestamp": datetime.now().isoformat(),
+                        "received_data": trend_data
+                    })
+                else:
+                    self._respond(503, {"error": "Pipeline no disponible"})
+            except json.JSONDecodeError:
+                self._respond(400, {"error": "JSON inválido"})
+            except Exception as e:
+                logger.error(f"Error procesando POST /trigger-video: {e}")
+                self._respond(500, {"error": f"Error interno del servidor: {e}"})
 
         else:
             self._respond(404, {"error": "Not found"})
@@ -108,7 +115,7 @@ def run_server(port: int = None, pipeline=None):
     """
     import schedule
     import time
-    from main import VideoAutoPipeline
+    from main import VideoAutoPipeline, logger
 
     port = port or int(os.getenv("PORT", "8080"))
 
@@ -116,12 +123,13 @@ def run_server(port: int = None, pipeline=None):
     p = VideoAutoPipeline()
     PipelineHandler.pipeline_ref = p
 
-    # Programar ejecuciones automáticas
-    schedule_times = os.getenv("SCHEDULE_TIMES", "08:00,18:00").split(",")
-    for t in schedule_times:
-        t = t.strip()
-        schedule.every().day.at(t).do(p.run_full_pipeline)
-        logger.info(f"Programado: {t}")
+    # Programar ejecuciones automáticas (si aplica)
+    if os.getenv("RUN_MODE", "server") == "scheduled":
+        schedule_times = os.getenv("SCHEDULE_TIMES", "08:00,18:00").split(",")
+        for t in schedule_times:
+            t = t.strip()
+            schedule.every().day.at(t).do(p.run_full_pipeline)
+            logger.info(f"Programado: {t}")
 
     # Scheduler en thread separado
     def run_scheduler():
