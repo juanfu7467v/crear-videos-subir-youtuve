@@ -1,0 +1,41 @@
+# ─── Secretos (NUNCA subir) ──────────────────────────────────────
+.env
+credentials/
+*.json
+!package.json
+!fly.toml
+
+# ─── Archivos generados ──────────────────────────────────────────
+output/
+temp/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# ─── Sistema ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ─── Python virtual env ──────────────────────────────────────────
+venv/
+env/
+.venv/
+.env/
+
+# ─── IDE ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.code-workspace
+
+# ─── Media generada ──────────────────────────────────────────────
+assets/music/*.mp3
+assets/music/*.wav
+# (mantener la carpeta vacía con .gitkeep)
