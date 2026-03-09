@@ -1,0 +1,59 @@
+# ═══════════════════════════════════════════════════════════════
+# El Tío Jota - Auto Video System
+# Configuración para Fly.io
+# ═══════════════════════════════════════════════════════════════
+
+app = "el-tio-jota-auto"
+primary_region = "mia"  # Miami - más cercano a LATAM
+
+[build]
+  dockerfile = "Dockerfile"
+
+# ─── Configuración del servidor ─────────────────────────────────
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false   # NO apagar - necesitamos el scheduler
+  auto_start_machines = true
+  min_machines_running = 1     # Siempre 1 máquina activa
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "10s"
+
+# ─── Recursos de la máquina ──────────────────────────────────────
+# shared-cpu-1x con 1GB RAM es suficiente para MoviePy y ffmpeg
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
+# ─── Variables de entorno (valores por defecto) ──────────────────
+# LAS CLAVES SECRETAS SE CONFIGURAN CON: fly secrets set
+[env]
+  RUN_MODE = "server"
+  CHANNEL_NAME = "El Tío Jota"
+  DEFAULT_VOICE = "es-MX-DaliaNeural"
+  DEFAULT_SPEECH_RATE = "+10%"
+  DEFAULT_PITCH = "+0Hz"
+  SCHEDULE_TIMES = "08:00,18:00"
+  TIMEZONE = "America/Mexico_City"
+  MIN_QC_SCORE = "60"
+  BG_MUSIC_VOLUME = "0.08"
+  USE_SUBTITLES = "true"
+  PORT = "8080"
+  LOG_LEVEL = "INFO"
+
+# ─── Volumen persistente para música y outputs ───────────────────
+# Crea el volumen con: fly volumes create el_tio_jota_data --size 5
+[[mounts]]
+  source = "el_tio_jota_data"
+  destination = "/app/assets/music"
+
+# ─── Notas de despliegue ─────────────────────────────────────────
+# 1. fly launch --no-deploy
+# 2. fly secrets set GEMINI_API_KEY=xxx PEXELS_API_KEY=xxx PIXABAY_API_KEY=xxx
+# 3. fly volumes create el_tio_jota_data --size 5 --region mia
+# 4. fly deploy
