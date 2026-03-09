@@ -1,0 +1,8 @@
+flask
+requests
+moviepy
+edge-tts
+google-api-python-client
+google-auth-oauthlib
+google how-auth-httplib2
+python-dotenv
