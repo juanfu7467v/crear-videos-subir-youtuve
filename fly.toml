@@ -1,10 +1,10 @@
-# fly.toml app configuration file generated for crear-videos-subir-youtuve on 2026-03-09T21:28:02Z
+# fly.toml app configuration file generated for crear-videos-subir-youtuve on 2026-03-09T23:59:32Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
 app = 'crear-videos-subir-youtuve'
-primary_region = 'iad'
+primary_region = 'gru'
 
 [build]
 
