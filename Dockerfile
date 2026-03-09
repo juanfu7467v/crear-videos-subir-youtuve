@@ -56,7 +56,8 @@ RUN pip install --upgrade pip && \
 COPY . .
 
 # ─── Crear directorios necesarios ───────────────────────────────
-RUN mkdir -p \
+RUN rm -f assets/music && \
+    mkdir -p \
     assets/music \
     assets/fonts \
     output \
