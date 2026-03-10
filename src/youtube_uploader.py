@@ -61,6 +61,7 @@ class YouTubeUploader:
     def __init__(self, credentials_path: str):
         self.credentials_path = credentials_path
         self.token_path = str(Path(credentials_path).parent / "token.json")
+
         self.youtube = None
         self._initialized = False
 

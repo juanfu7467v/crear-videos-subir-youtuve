@@ -12,7 +12,7 @@ class ScriptGenerator:
         self.api_key = api_key
         if api_key:
             genai.configure(api_key=api_key)
-            self.client = genai.GenerativeModel("gemini-1.5-flash")
+            self.client = genai.GenerativeModel("gemini-pro")
         else:
             self.client = None
 

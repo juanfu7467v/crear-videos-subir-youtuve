@@ -45,7 +45,7 @@ class QualityChecker:
         if self.api_key:
             try:
                 genai.configure(api_key=self.api_key)
-                self.client = genai.GenerativeModel("gemini-1.5-flash")
+                self.client = genai.GenerativeModel("gemini-pro")
                 logger.info("✅ Cliente Gemini Vision (google-genai) configurado.")
             except Exception as e:
                 logger.error(f"❌ Error configurando QC: {e}")
