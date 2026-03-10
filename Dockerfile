@@ -1,4 +1,4 @@
-# 🎬 El Tío Jota - Auto Video System
+'''# 🎬 El Tío Jota - Auto Video System
 # Dockerfile optimizado para Fly.io con soporte para MoviePy y Edge-TTS
 
 FROM python:3.11-slim-bookworm
@@ -35,11 +35,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Asegurar que existan todos los directorios necesarios ANTES de copiar el código
+# Esto evita errores si el repositorio contiene archivos con los mismos nombres que los directorios
+RUN mkdir -p assets/music assets/fonts output logs temp/audio temp/video temp/images credentials
+
 # Copiar el resto del código
 COPY . .
-
-# Asegurar que existan todos los directorios necesarios
-RUN mkdir -p assets/music assets/fonts output logs temp/audio temp/video temp/images credentials
 
 # Exponer el puerto que Fly.io espera (8080 por defecto)
 EXPOSE 8080
@@ -47,3 +48,4 @@ EXPOSE 8080
 # Comando de ejecución
 # El sistema iniciará el servidor receptor definido en main.py
 CMD ["python", "main.py"]
+'''
