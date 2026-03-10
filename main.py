@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import threading
+import time
 from pathlib import Path
 import dotenv
 
@@ -37,9 +38,10 @@ class VideoAutoPipeline:
             topic = trend_data.get('topic', 'Sin nombre')
             logger.info(f"═══ INICIANDO PRODUCCIÓN DE: {topic} ═══")
             
-            # AQUÍ ES DONDE DEBES PONER TUS LLAMADAS A LAS CLASES
-            # script = self.script_gen.generate_full_script(trend_data)
-            # ... resto de pasos ...
+            # --- SIMULACIÓN DE TRABAJO ---
+            # Aquí es donde iría tu lógica real de generación de video
+            # Por ahora, simulamos un tiempo de procesamiento para que el hilo no muera
+            time.sleep(60) 
             
             logger.info(f"✅ Producción completada: {topic}")
         except Exception as e:
