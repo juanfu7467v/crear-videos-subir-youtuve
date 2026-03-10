@@ -1,27 +1,13 @@
 app = 'crear-videos-subir-youtuve'
-primary_region = 'iad'
 
-[build]
-
-# Configuramos la política para que no sea tan agresiva con el apagado
 [http_service]
   internal_port = 8080
   force_https = true
   auto_start_machines = true
-  auto_stop_machines = 'stop'
-  # Aumentamos el tiempo de espera antes de que Fly decida apagar la máquina
-  # Esto le da tiempo al proceso de creación de video para terminar
-  min_machines_running = 0
-
-[checks]
-  [checks.alive]
-    port = 8080
-    type = 'http'
-    interval = '30s'
-    timeout = '5s'
-    path = '/'
+  # IMPORTANTE: Desactivamos el autostop automático de Fly
+  # para que el código (shutdown_machine) tenga el control total
+  auto_stop_machines = false 
 
 [[vm]]
   memory = '1gb'
-  cpu_kind = 'shared'
   cpus = 1
