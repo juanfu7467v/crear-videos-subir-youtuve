@@ -1,43 +1,5 @@
-# ═══════════════════════════════════════════════════════════════
-# El Tío Jota - Auto Video System
-# Dependencias del proyecto
-# ═══════════════════════════════════════════════════════════════
-
-# ─── IA / Gemini ────────────────────────────────────────────────
-google-genai>=0.8.0
-
-# ─── Text-to-Speech (GRATUITO - Voces Microsoft Edge) ──────────
-edge-tts>=6.1.9
-
-# ─── Video / Edición ────────────────────────────────────────────
-moviepy>=1.0.3
-imageio>=2.31.0
-imageio-ffmpeg>=0.4.9
+moviepy==1.0.3
+imageio==2.31.0
+imageio-ffmpeg==0.4.9
 Pillow>=10.0.0
 numpy>=1.24.0
-
-# ─── YouTube API ────────────────────────────────────────────────
-google-api-python-client>=2.100.0
-google-auth>=2.22.0
-google-auth-oauthlib>=1.1.0
-google-auth-httplib2>=0.1.1
-
-# ─── HTTP / Descarga de Media ───────────────────────────────────
-requests>=2.31.0
-aiohttp>=3.9.0
-urllib3>=2.0.0
-
-# ─── Configuración y Variables ──────────────────────────────────
-python-dotenv>=1.0.0
-
-# ─── Programación de Tareas ─────────────────────────────────────
-schedule>=1.2.0
-
-# ─── Procesamiento de Subtítulos ────────────────────────────────
-# (Edge-TTS ya incluye sub-maker)
-
-# ─── Utilidades ─────────────────────────────────────────────────
-tqdm>=4.66.0
-colorlog>=6.7.0
-
-# Dummy comment to force rebuild
