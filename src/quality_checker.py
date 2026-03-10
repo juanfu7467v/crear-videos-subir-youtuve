@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
-import google.generativeai as genai
+import google.genai as genai
 
 logger = logging.getLogger(__name__)
 
