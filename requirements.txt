@@ -39,3 +39,5 @@ schedule>=1.2.0
 # ─── Utilidades ─────────────────────────────────────────────────
 tqdm>=4.66.0
 colorlog>=6.7.0
+
+# Dummy comment to force rebuild

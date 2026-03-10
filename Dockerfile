@@ -41,6 +41,7 @@ RUN mkdir -p assets/music assets/fonts output logs temp/audio temp/video temp/im
 
 # Copiar el resto del código
 COPY . .
+RUN ls -R /app
 
 # Exponer el puerto que Fly.io espera (8080 por defecto)
 EXPOSE 8080
