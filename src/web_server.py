@@ -24,19 +24,31 @@ class PipelineHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             post_data = json.loads(self.rfile.read(content_length).decode('utf-8'))
             
-            # Lanzamos en hilo separado para no bloquear el servidor
-            thread = threading.Thread(
-                target=self.pipeline_ref.run_full_pipeline_with_data,
-                args=(post_data,)
-            )
-            thread.start()
-            
-            self.send_response(202)
-            self.end_headers()
-            self.wfile.write(b'{"status": "in_progress"}')
+            if self.pipeline_ref:
+                logger.info("🚀 Recibida solicitud de video. Iniciando hilo...")
+                thread = threading.Thread(
+                    target=self.pipeline_ref.run_full_pipeline_with_data,
+                    args=(post_data,),
+                    daemon=True
+                )
+                thread.start()
+                self._respond(202, {"status": "iniciado"})
+            else:
+                self._respond(503, {"error": "Pipeline no listo"})
+        else:
+            self._respond(404, {"error": "Not found"})
 
-def run_server():
+    def _respond(self, status, data):
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self._send_cors_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+def run_server(port=8080):
     from main import VideoAutoPipeline
     PipelineHandler.pipeline_ref = VideoAutoPipeline()
-    server = HTTPServer(("0.0.0.0", int(os.getenv("PORT", "8080"))), PipelineHandler)
+    server = HTTPServer(("0.0.0.0", port), PipelineHandler)
+    logger.info(f"✅ El Tío Jota listo en puerto {port}")
     server.serve_forever()
