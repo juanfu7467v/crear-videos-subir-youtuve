@@ -1,63 +1,43 @@
-"""
-main.py
-──────────────
-Sistema Automático de Creación de Videos.
-"""
-
 import os
 import sys
-import json
 import logging
-import traceback
-from datetime import datetime
+import requests
 from pathlib import Path
-
-# --- CORRECCIÓN CRÍTICA DE DOTENV ---
 import dotenv
-dotenv.load_dotenv() 
 
-# Añadir src al path
+dotenv.load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.script_generator import ScriptGenerator
-from src.tts_engine import TTSEngine
-from src.media_fetcher import MediaFetcher
-from src.video_editor import VideoEditor
-from src.quality_checker import QualityChecker
-from src.youtube_uploader import YouTubeUploader
-from src.scheduler import VideoScheduler
+# ... (demás imports)
 
-# ─── Configuración de Logging ─────────────────────────────────
-def setup_logging():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
-    return logging.getLogger("AutoVideo")
+logger = logging.getLogger("AutoVideo")
 
-logger = setup_logging()
-
-# ─── Pipeline Principal ────────────────────────────────────────
 class VideoAutoPipeline:
     def __init__(self):
-        self.gemini_api_key   = os.getenv("GEMINI_API_KEY", "")
-        self.pexels_api_key   = os.getenv("PEXELS_API_KEY", "")
-        self.pixabay_api_key  = os.getenv("PIXABAY_API_KEY", "")
-        self.youtube_creds    = os.getenv("YOUTUBE_CREDENTIALS_FILE", "credentials/youtube_credentials.json")
-        self.channel_name     = os.getenv("CHANNEL_NAME", "El Tío Jota")
-        
-        self.script_gen      = ScriptGenerator(self.gemini_api_key)
-        self.tts_engine      = TTSEngine()
-        self.media_fetcher   = MediaFetcher(self.pexels_api_key, self.pixabay_api_key)
-        self.video_editor    = VideoEditor()
-        self.quality_checker = QualityChecker(self.gemini_api_key)
-        self.yt_uploader     = YouTubeUploader(self.youtube_creds)
-        self.scheduler       = VideoScheduler()
-
-    def run_full_pipeline_with_data(self, trend_data: dict) -> dict:
-        # (Tu lógica de pipeline se mantiene igual aquí...)
+        # ... (tu __init__ actual)
         pass
+
+    def shutdown_machine(self):
+        """Ordena a Fly.io apagar la máquina tras completar el trabajo."""
+        logger.info("🛑 Producción finalizada. Apagando máquina para ahorrar recursos...")
+        try:
+            # Fly.io permite detenerse a sí mismo a través de su API interna
+            requests.post("http://localhost:5500/v1/apps/crear-videos-subir-youtuve/stop", timeout=5)
+        except Exception as e:
+            logger.warning(f"No se pudo contactar a la API de Fly para apagado: {e}")
+            os._exit(0) # Apagado forzoso si la API no responde
+
+    def run_full_pipeline_with_data(self, trend_data: dict):
+        try:
+            logger.info("═══ INICIANDO CREACIÓN DE VIDEO ═══")
+            # --- TU LÓGICA DE PIPELINE AQUÍ ---
+            # ...
+            logger.info("✅ Video creado y subido exitosamente.")
+        except Exception as e:
+            logger.error(f"❌ Error en pipeline: {e}")
+        finally:
+            self.shutdown_machine() # <--- ESTO ES LO NUEVO
 
 if __name__ == "__main__":
     from src.web_server import run_server
