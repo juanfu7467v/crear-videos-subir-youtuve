@@ -56,7 +56,6 @@ class ScriptGenerator:
 
     def _configure_gemini(self):
         if self.api_key:
-            # NUEVA FORMA: Se crea un cliente
             try:
                 self.client = genai.Client(api_key=self.api_key)
                 logger.info("✅ Cliente Gemini (google-genai) configurado correctamente.")
@@ -85,9 +84,9 @@ class ScriptGenerator:
 
         try:
             logger.info(f"Generando guion {'Short' if is_short else 'Long'}...")
-            # NUEVA FORMA: Llamada al modelo con el cliente
+            # CORREGIDO: Modelo definido sin el prefijo 'models/'
             response = self.client.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-1.5-flash", 
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.85,
@@ -96,14 +95,11 @@ class ScriptGenerator:
             )
             
             raw = response.text.strip()
-            # Limpiar markdown si el modelo lo incluye
             raw = re.sub(r'```json\s*|\s*```', '', raw)
-            
             script_data = json.loads(raw)
             
             if "voice" not in script_data:
                 script_data["voice"] = self.default_voice
-            
             return script_data
 
         except Exception as e:
@@ -118,14 +114,10 @@ class ScriptGenerator:
     def _get_demo_script(self, trend_data: dict, is_short: bool) -> dict:
         return {
             "title": "Demo Script",
-            "hook": "Esto es un video de prueba.",
             "full_script": "Contenido de prueba para el sistema.",
-            "segments": [],
-            "keywords": ["demo"],
-            "visual_suggestions": [],
             "voice": self.default_voice,
-            "speech_rate": "+10%",
+            "keywords": ["demo"],
             "description": "Video generado automáticamente.",
             "tags": ["demo"],
-            "estimated_duration_seconds": 60 if is_short else 600,
+            "estimated_duration_seconds": 60
         }
