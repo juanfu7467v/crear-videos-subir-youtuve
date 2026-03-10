@@ -31,7 +31,7 @@ class VideoAutoPipeline:
         self.media_fetcher   = MediaFetcher(os.getenv("PEXELS_API_KEY", ""), os.getenv("PIXABAY_API_KEY", ""))
         self.video_editor    = VideoEditor()
         self.quality_checker = QualityChecker(os.getenv("GEMINI_API_KEY", ""))
-        self.yt_uploader     = YouTubeUploader(os.getenv("YOUTUBE_CREDENTIALS_FILE", "credentials/youtube_credentials.json"))
+        self.yt_uploader     = YouTubeUploader("credentials/youtube_credentials.json")
         self.scheduler       = VideoScheduler()
 
     def run_full_pipeline_with_data(self, trend_data: dict):

@@ -30,11 +30,11 @@ Configura solo las siguientes variables en Fly.io:
 | `PEXELS_API_KEY` | API Key de Pexels (para clips de video) |
 | `PIXABAY_API_KEY` | API Key de Pixabay (para clips de video) |
 | `CHANNEL_NAME` | Nombre de tu canal de YouTube |
-| `YOUTUBE_CREDENTIALS_FILE` | Ruta al archivo JSON de credenciales (ej: `credentials/youtube_credentials.json`) |
+
 
 ### Simplificación del Sistema
 Se han eliminado las siguientes variables y archivos para simplificar el sistema:
-* **Eliminado:** `API_SECRET_KEY`, `RUN_MODE`, `SCHEDULE_TIMES`.
+* **Eliminado:** `API_SECRET_KEY`, `RUN_MODE`, `SCHEDULE_TIMES`, `YOUTUBE_CREDENTIALS_FILE`.
 * **Eliminado:** Módulo de análisis de tendencias interno (ahora es pasivo).
 * **Eliminado:** Módulo de programación interna (ahora depende del trigger externo).
 

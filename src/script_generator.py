@@ -10,7 +10,11 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.client = genai.Client(api_key=self.api_key) if api_key else None
+        if api_key:
+            genai.configure(api_key=api_key)
+            self.client = genai.GenerativeModel("gemini-1.5-flash")
+        else:
+            self.client = None
 
     def generate_full_script(self, trend_data: dict) -> dict:
         prompt = f"Tema: {trend_data.get('topic')}. Responde solo JSON con campos: title, full_script, keywords, voice, description, tags."
@@ -20,10 +24,7 @@ class ScriptGenerator:
 
         try:
             # Llamada corregida y simplificada para la librería google-genai
-            response = self.client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=prompt
-            )
+            response = self.client.generate_content(prompt)
             raw = re.sub(r'```json\s*|\s*```', '', response.text.strip())
             return json.loads(raw)
         except Exception as e:

@@ -44,8 +44,8 @@ class QualityChecker:
     def _configure_gemini(self):
         if self.api_key:
             try:
-                # NUEVA FORMA: Cliente
-                self.client = genai.Client(api_key=self.api_key)
+                genai.configure(api_key=self.api_key)
+                self.client = genai.GenerativeModel("gemini-1.5-flash")
                 logger.info("✅ Cliente Gemini Vision (google-genai) configurado.")
             except Exception as e:
                 logger.error(f"❌ Error configurando QC: {e}")
@@ -64,8 +64,7 @@ class QualityChecker:
                 image_bytes = f.read()
 
             # NUEVA FORMA: Envío de imagen con el cliente nuevo
-            response = self.client.models.generate_content(
-                model="gemini-1.5-flash",
+            response = self.client.generate_content(
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
                     QC_PROMPT
