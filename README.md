@@ -1,4 +1,4 @@
-# El Tío Jota - Sistema Automático de Videos (Receptor)
+# Sistema Automático de Videos (Receptor)
 
 Este sistema crea y sube videos a YouTube automáticamente al recibir una señal JSON de un sistema externo de análisis de tendencias.
 
