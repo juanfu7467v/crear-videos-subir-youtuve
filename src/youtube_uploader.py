@@ -1,41 +1,31 @@
 import json
 import logging
 import os
-import time
-from pathlib import Path
-from typing import Optional
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
 logger = logging.getLogger(__name__)
 
-try:
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
-    from googleapiclient.http import MediaFileUpload
-    YOUTUBE_AVAILABLE = True
-except ImportError:
-    YOUTUBE_AVAILABLE = False
-    logger.warning("Librerías de Google no instaladas.")
-
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
-
 class YouTubeUploader:
-    def __init__(self):
+    # Aceptamos el argumento path_arg para que main.py no falle
+    def __init__(self, path_arg: str = None):
         self.youtube = None
         self._initialized = False
+        self.credentials_path = path_arg
 
     def _load_credentials_from_secrets(self):
         """Carga y refresca credenciales desde el secreto de Fly."""
         creds_json = os.getenv("YOUTUBE_CREDENTIALS_FILE")
         if not creds_json:
+            logger.error("No se encontró el secreto YOUTUBE_CREDENTIALS_FILE")
             return None
 
         try:
-            # Limpieza crítica del JSON
             data = json.loads(creds_json)
-            creds = Credentials.from_authorized_user_info(data, SCOPES)
+            creds = Credentials.from_authorized_user_info(data, ["https://www.googleapis.com/auth/youtube.upload"])
             
-            # Forzar refresco si es necesario
             if creds and creds.expired and creds.refresh_token:
                 logger.info("Refrescando token de YouTube...")
                 creds.refresh(Request())
@@ -49,14 +39,17 @@ class YouTubeUploader:
         if self._initialized: return True
         creds = self._load_credentials_from_secrets()
         if creds:
-            self.youtube = build("youtube", "v3", credentials=creds)
-            self._initialized = True
-            return True
+            try:
+                self.youtube = build("youtube", "v3", credentials=creds)
+                self._initialized = True
+                return True
+            except Exception as e:
+                logger.error(f"Error construyendo servicio YouTube: {e}")
         return False
 
     def upload(self, video_path: str, title: str, description: str = "", **kwargs) -> str:
         if not self._initialize():
-            logger.warning("Subida simulada (sin credenciales válidas).")
+            logger.warning("Subida simulada (sin credenciales).")
             return "https://youtu.be/SIMULADO"
 
         try:
@@ -73,5 +66,5 @@ class YouTubeUploader:
             
             return f"https://youtu.be/{response.get('id')}"
         except Exception as e:
-            logger.error(f"Error subiendo: {e}")
+            logger.error(f"Error subiendo a YouTube: {e}")
             return "https://youtu.be/SIMULADO"
