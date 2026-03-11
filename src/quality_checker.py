@@ -1,7 +1,7 @@
 """
 quality_checker.py
 ───────────────────
-Control de calidad automático con la NUEVA librería google-genai.
+Control de calidad automático con llamadas directas a la API de Gemini v1beta.
 Analiza frames del video para verificar calidad visual.
 """
 
@@ -12,10 +12,9 @@ import os
 import subprocess
 import tempfile
 import re
+import requests
 from pathlib import Path
 from typing import Optional
-from google import genai
-from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -38,43 +37,51 @@ class QualityChecker:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.min_score = int(os.getenv("MIN_QC_SCORE", "60"))
-        self.client = None
-        self._configure_gemini()
-
-    def _configure_gemini(self):
-        if self.api_key:
-            try:
-                genai.configure(api_key=self.api_key)
-                self.client = genai.GenerativeModel("gemini-pro")
-                logger.info("✅ Cliente Gemini Vision (google-genai) configurado.")
-            except Exception as e:
-                logger.error(f"❌ Error configurando QC: {e}")
-                self.client = None
-        else:
-            self.client = None
-            logger.warning("⚠️ Sin API Gemini. QC desactivado.")
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-09-2025:generateContent?key={self.api_key}"
 
     def _analyze_frame(self, frame_path: str) -> Optional[dict]:
-        if not self.client:
+        if not self.api_key:
             return None
 
         try:
-            # Leer imagen
+            # Leer imagen y codificar en base64
             with open(frame_path, "rb") as f:
                 image_bytes = f.read()
+                image_base64 = base64.b64encode(image_bytes).decode('utf-8')
 
-            # NUEVA FORMA: Envío de imagen con el cliente nuevo
-            response = self.client.generate_content(
-                contents=[
-                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                    QC_PROMPT
+            # Preparar payload para la API directa
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": QC_PROMPT},
+                            {
+                                "inlineData": {
+                                    "mimeType": "image/jpeg",
+                                    "data": image_base64
+                                }
+                            }
+                        ]
+                    }
                 ]
-            )
+            }
+            headers = {'Content-Type': 'application/json'}
 
-            raw = response.text.strip()
-            # Limpiar posibles etiquetas markdown
-            raw = re.sub(r'```json\s*|\s*```', '', raw)
-            return json.loads(raw)
+            response = requests.post(self.url, headers=headers, json=payload)
+            response.raise_for_status()
+            
+            data = response.json()
+
+            # Extraer el texto de la respuesta de Gemini
+            if 'candidates' in data and len(data['candidates']) > 0:
+                text_response = data['candidates'][0]['content']['parts'][0]['text']
+                raw = text_response.strip()
+                # Limpiar posibles etiquetas markdown
+                raw = re.sub(r'```json\s*|\s*```', '', raw)
+                return json.loads(raw)
+            else:
+                logger.error(f"Respuesta inesperada de Gemini en QC: {data}")
+                return None
 
         except Exception as e:
             logger.debug(f"⚠️ Error analizando frame: {e}")
@@ -101,7 +108,7 @@ class QualityChecker:
         frames = self._extract_frames(video_path, num_frames)
         result["frames_analyzed"] = len(frames)
 
-        if frames and self.client:
+        if frames and self.api_key:
             frame_results = []
             for f_path in frames:
                 res = self._analyze_frame(f_path)

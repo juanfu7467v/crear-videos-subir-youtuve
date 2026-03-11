@@ -2,7 +2,6 @@
 # El Tío Jota - Auto Video System - Dependencias Estables 2026
 # ═══════════════════════════════════════════════════════════════
 
-google-genai>=0.8.0
 edge-tts>=6.1.9
 moviepy==1.0.3
 imageio==2.31.0
