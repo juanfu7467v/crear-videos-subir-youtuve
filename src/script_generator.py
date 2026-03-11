@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # Usando el modelo gemini-1.5-flash que es estable en v1beta
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+        # Usando el modelo gemini-3-flash-preview estable en v1beta
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={self.api_key}"
 
     def generate_full_script(self, trend_data: dict) -> dict:
         prompt = f"Tema: {trend_data.get('topic')}. Responde solo JSON con campos: title, full_script, keywords, voice, description, tags."
@@ -42,7 +42,7 @@ class ScriptGenerator:
                 return json.loads(raw)
             else:
                 logger.error(f"Respuesta inesperada de Gemini: {data}")
-                raise ValueError("No se encontró contenido en la respuesta de Gemini")
+                raise ValueError("No se encontrÃ³ contenido en la respuesta de Gemini")
 
         except Exception as e:
             logger.error(f"Error en Gemini API: {e}")
