@@ -5,9 +5,10 @@ primary_region = 'iad'
   internal_port = 8080
   force_https = true
   auto_start_machines = true
-  auto_stop_machines = true  # Fly apagará la máquina si no hay actividad web
-  min_machines_running = 0
+  # IMPORTANTE: Cambiamos a false para que Fly no mate el proceso mientras editas el video
+  auto_stop_machines = false 
+  min_machines_running = 1
 
 [[vm]]
-  memory = '1gb'
+  memory = '1gb' # El renderizado de video consume RAM, 1GB es lo mínimo recomendado
   cpus = 1
