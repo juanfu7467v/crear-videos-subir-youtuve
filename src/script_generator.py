@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import re
 import requests
 
@@ -9,54 +8,26 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # Usamos gemini-1.5-flash, es el modelo más estable y garantizado
-        self.model_name = "gemini-1.5-flash"
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self.api_key}"
+        # Usamos gemini-1.5-flash-8b, es el más compatible con cuentas nuevas/gratuitas
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key={self.api_key}"
 
     def generate_full_script(self, trend_data: dict) -> dict:
-        topic = trend_data.get('topic', 'curiosidades')
-        prompt = (
-            f"Actúa como un experto en YouTube. Escribe un guion corto para un video sobre: {topic}. "
-            "Responde estrictamente en formato JSON válido. "
-            "El JSON debe tener exactamente estos campos: "
-            "{'title': '...', 'full_script': '...', 'keywords': '...', 'voice': 'es-MX-JorgeNeural', 'description': '...', 'tags': '...'}. "
-            "No incluyas explicaciones, solo el JSON puro."
-        )
+        prompt = f"Tema: {trend_data.get('topic')}. Responde SOLO un JSON con: title, full_script, keywords, voice, description, tags."
         
-        if not self.api_key:
-            return {"title": "Error", "full_script": "No API Key", "voice": "es-MX-JorgeNeural"}
-
         try:
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.7}
-            }
-            headers = {'Content-Type': 'application/json'}
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            response = requests.post(self.url, json=payload, timeout=30)
             
-            response = requests.post(self.url, headers=headers, json=payload, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if 'candidates' in data:
-                text_response = data['candidates'][0]['content']['parts'][0]['text']
-                # Limpieza robusta del JSON
-                json_match = re.search(r'\{.*\}', text_response, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group(0))
-                else:
-                    return json.loads(text_response)
-            
-            raise ValueError("Respuesta vacía de Gemini")
+            if response.status_code != 200:
+                logger.error(f"Error API {response.status_code}: {response.text}")
+                # Fallback para no detener el bot
+                return {"title": "Misterios", "full_script": "Descubre los misterios.", "voice": "mx_male", "keywords": "misterio", "description": "...", "tags": "..."}
 
+            data = response.json()
+            text_response = data['candidates'][0]['content']['parts'][0]['text']
+            raw = re.search(r'\{.*\}', text_response, re.DOTALL).group(0)
+            return json.loads(raw)
+            
         except Exception as e:
-            logger.error(f"Error crítico en Gemini API: {e}")
-            # Retorno de emergencia para que el pipeline no se rompa
-            return {
-                "title": "Misterios", 
-                "full_script": "Bienvenidos a este nuevo video de misterios.", 
-                "voice": "es-MX-JorgeNeural",
-                "keywords": "misterio, océano",
-                "description": "Video sobre misterios.",
-                "tags": "misterio, shorts"
-            }
+            logger.error(f"Error en Gemini: {e}")
+            return {"title": "Error", "full_script": "Error al generar", "voice": "mx_male", "keywords": "", "description": "", "tags": ""}
