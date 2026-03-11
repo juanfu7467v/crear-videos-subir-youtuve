@@ -37,7 +37,8 @@ class QualityChecker:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.min_score = int(os.getenv("MIN_QC_SCORE", "60"))
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-09-2025:generateContent?key={self.api_key}"
+        # Usando el modelo gemini-1.5-flash que es estable en v1beta
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
 
     def _analyze_frame(self, frame_path: str) -> Optional[dict]:
         if not self.api_key:
