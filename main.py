@@ -3,6 +3,7 @@ import sys
 import logging
 import threading
 import time
+import shutil
 from pathlib import Path
 import dotenv
 
@@ -36,6 +37,10 @@ class VideoAutoPipeline:
 
     def run_full_pipeline_with_data(self, trend_data: dict):
         """Pipeline que procesa los datos recibidos y genera el video."""
+        video_id = f"vid_{int(time.time())}"
+        output_dir = Path("output") / video_id
+        temp_assets_dir = Path("assets/temp") / video_id
+        
         try:
             # Extraer datos del JSON recibido
             topic = trend_data.get('tema_recomendado') or trend_data.get('topic', 'Sin tema')
@@ -61,8 +66,6 @@ class VideoAutoPipeline:
             
             # 2. Generar Audio (TTS)
             logger.info("2/6 Generando audio...")
-            video_id = f"vid_{int(time.time())}"
-            output_dir = Path("output") / video_id
             output_dir.mkdir(parents=True, exist_ok=True)
             
             audio_path = str(output_dir / "voice.mp3")
@@ -120,10 +123,32 @@ class VideoAutoPipeline:
             logger.info(f"🔗 URL: {video_url}")
             logger.info(f"📅 Programado para: {publish_time}")
 
+            # --- POLÍTICA DE RESIDUO CERO ---
+            logger.info("🧹 Aplicando Política de Residuo Cero...")
+            self._cleanup_assets(output_dir, temp_assets_dir)
+
         except Exception as e:
             logger.error(f"❌ Error crítico en pipeline: {e}")
             import traceback
             logger.error(traceback.format_exc())
+            # Intentar limpiar incluso si falla, para no dejar basura
+            self._cleanup_assets(output_dir, temp_assets_dir)
+
+    def _cleanup_assets(self, output_dir: Path, temp_assets_dir: Path):
+        """Elimina archivos temporales generados durante el proceso."""
+        try:
+            # 1. Eliminar directorio de salida (audio, video final, miniatura)
+            if output_dir.exists():
+                shutil.rmtree(output_dir)
+                logger.info(f"🗑️ Eliminado directorio de salida: {output_dir}")
+            
+            # 2. Eliminar clips y media temporal
+            if temp_assets_dir.exists():
+                shutil.rmtree(temp_assets_dir)
+                logger.info(f"🗑️ Eliminado directorio de media temporal: {temp_assets_dir}")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error durante la limpieza de residuos: {e}")
 
 if __name__ == "__main__":
     from src.web_server import run_server
