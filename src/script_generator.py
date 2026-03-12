@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key.strip()
-        # Usamos las variables de entorno que ya tienes probadas
         self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -18,9 +17,15 @@ class ScriptGenerator:
 
     def generate_full_script(self, trend_data: dict) -> dict:
         topic = trend_data.get('topic', 'curiosidades')
+        
+        # MEJORA: Instrucción explícita para el Hook de 3 segundos
         prompt = (
-            f"Tema: {topic}. Responde SOLO un JSON sin formato markdown, "
-            "con estos campos: 'title', 'full_script', 'keywords', 'voice', 'description', 'tags'."
+            f"Tema: {topic}. Genera un guion para un video de YouTube Short. "
+            "IMPORTANTE: El guion DEBE comenzar con un 'Hook' (gancho) impactante de aproximadamente 3 segundos "
+            "que llame la atención del espectador de inmediato para el canal 'El Tío Jota'. "
+            "Responde SOLO un JSON sin formato markdown, con estos campos: "
+            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags'. "
+            "En el campo 'voice', pon siempre 'random'."
         )
         
         try:
@@ -36,10 +41,8 @@ class ScriptGenerator:
                 return self._get_fallback()
 
             data = response.json()
-            # Acceso seguro al contenido generado
             text_response = data['candidates'][0]['content']['parts'][0]['text']
             
-            # Limpieza para asegurar que recibimos JSON puro
             raw = re.search(r'\{.*\}', text_response, re.DOTALL)
             if raw:
                 return json.loads(raw.group(0))
@@ -52,10 +55,10 @@ class ScriptGenerator:
     def _get_fallback(self):
         """Devuelve una estructura válida si la API falla para no romper el pipeline."""
         return {
-            "title": "Misterios", 
-            "full_script": "Bienvenidos, hoy exploramos un tema fascinante.", 
-            "voice": "es-MX-JorgeNeural", 
-            "keywords": "misterio, viral", 
-            "description": "Explorando misterios.", 
-            "tags": "misterio, viral"
+            "title": "Misterios Increíbles", 
+            "full_script": "¡Detente! ¿Sabías que lo que estás a punto de ver cambiará tu forma de pensar? Bienvenidos a El Tío Jota, hoy exploramos un tema fascinante.", 
+            "voice": "random", 
+            "keywords": "misterio, viral, curiosidades", 
+            "description": "Explorando misterios con El Tío Jota.", 
+            "tags": "misterio, viral, curiosidades, shorts"
         }

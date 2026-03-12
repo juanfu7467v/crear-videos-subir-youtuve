@@ -44,10 +44,6 @@ class MediaFetcher:
     ) -> list:
         """
         Descarga toda la media necesaria para un video.
-
-        Returns:
-            Lista de dicts con info de cada elemento:
-            [{"path": "...", "type": "video|image", "duration": 5, "keyword": "..."}]
         """
         save_dir = Path(save_dir) / video_id
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -65,7 +61,14 @@ class MediaFetcher:
             try:
                 media_item = None
 
-                if prefer_video and self.pexels_key:
+                # MEJORA: Priorizar Pollinations.ai para imágenes generadas por IA si se desea
+                # O mantener un balance. El usuario pidió usar Pollinations.ai.
+                # Vamos a intentar generar una imagen IA cada 2 clips para dar variedad visual única.
+                
+                if i % 2 == 0:
+                    media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:03d}")
+                
+                if not media_item and prefer_video and self.pexels_key:
                     media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}")
 
                 if not media_item and self.pixabay_key:
@@ -75,7 +78,7 @@ class MediaFetcher:
                     media_item = self._fetch_pexels_image(kw, save_dir, f"img_{i:03d}")
 
                 if not media_item:
-                    media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:03d}")
+                    media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_fallback_{i:03d}")
 
                 if media_item:
                     media_list.append(media_item)
@@ -119,7 +122,6 @@ class MediaFetcher:
 
             videos = data.get("videos", [])
             if not videos:
-                # Intentar landscape si no hay portrait
                 params["orientation"] = "landscape"
                 resp = self.session.get(url, params=params, headers=headers, timeout=15)
                 videos = resp.json().get("videos", [])
@@ -128,12 +130,10 @@ class MediaFetcher:
                 return None
 
             video = random.choice(videos[:5])
-            # Elegir la versión de menor resolución para ahorrar espacio
             video_files = sorted(
                 video.get("video_files", []),
                 key=lambda x: x.get("width", 0)
             )
-            # Preferir calidad media (720p)
             target = next(
                 (f for f in video_files if f.get("width", 0) <= 1280 and f.get("height", 0) >= 480),
                 video_files[0] if video_files else None
@@ -222,7 +222,6 @@ class MediaFetcher:
             hits = resp.json().get("hits", [])
 
             if not hits:
-                # Intentar en inglés
                 params["lang"] = "en"
                 resp = self.session.get(f"{PIXABAY_BASE}/videos/", params=params, timeout=15)
                 hits = resp.json().get("hits", [])
@@ -232,7 +231,6 @@ class MediaFetcher:
 
             hit = random.choice(hits[:5])
             videos = hit.get("videos", {})
-            # Preferir calidad medium
             vid = videos.get("medium") or videos.get("small") or videos.get("large")
 
             if not vid or not vid.get("url"):
@@ -261,12 +259,11 @@ class MediaFetcher:
         Genera imagen IA con Pollinations.ai (totalmente gratis).
         """
         try:
-            # Crear prompt mejorado para la imagen
             prompt = self._build_image_prompt(keyword)
             encoded = requests.utils.quote(prompt)
 
-            # Configurar para aspect ratio vertical (Shorts) o horizontal
-            url = f"{POLLINATIONS}/{encoded}?width=1080&height=1920&seed={random.randint(1,9999)}&nologo=true"
+            # Configurar para aspect ratio vertical (Shorts)
+            url = f"{POLLINATIONS}/{encoded}?width=1080&height=1920&seed={random.randint(1,999999)}&nologo=true"
 
             filename = save_dir / f"{prefix}_ai.jpg"
 
@@ -277,7 +274,7 @@ class MediaFetcher:
                 for chunk in resp.iter_content(chunk_size=8192):
                     f.write(chunk)
 
-            if filename.stat().st_size < 10000:  # Imagen muy pequeña = error
+            if filename.stat().st_size < 10000:
                 filename.unlink(missing_ok=True)
                 return None
 
@@ -298,14 +295,14 @@ class MediaFetcher:
     def _build_image_prompt(self, keyword: str) -> str:
         """Crea un prompt mejorado para generación de imagen IA."""
         styles = [
-            "cinematic lighting, professional photography",
-            "vibrant colors, high contrast",
-            "dramatic composition, 4K ultra HD",
-            "photorealistic, stunning visual",
-            "editorial photography style",
+            "cinematic lighting, professional photography, highly detailed",
+            "vibrant colors, high contrast, masterpiece",
+            "dramatic composition, 8K resolution, unreal engine 5 render",
+            "photorealistic, stunning visual, sharp focus",
+            "editorial photography style, artistic lighting",
         ]
         style = random.choice(styles)
-        return f"{keyword}, {style}, vertical format, no text, no watermark"
+        return f"{keyword}, {style}, vertical format, high quality, no text, no watermark"
 
     # ─── Descarga genérica ────────────────────────────────────
     def _download_file(self, url: str, save_path: str, max_size_mb: int = 50):
@@ -339,14 +336,14 @@ class MediaFetcher:
         Genera una miniatura para YouTube usando Pollinations.ai.
         """
         prompt = (
-            f"YouTube thumbnail, {topic}, {style}, "
+            f"YouTube thumbnail for a video about {topic}, {style}, "
             f"bold colors, eye-catching, professional, "
             f"16:9 aspect ratio, high quality, no text overlay"
         )
 
         try:
             encoded = requests.utils.quote(prompt)
-            url = f"{POLLINATIONS}/{encoded}?width=1280&height=720&seed={random.randint(1,9999)}&nologo=true"
+            url = f"{POLLINATIONS}/{encoded}?width=1280&height=720&seed={random.randint(1,999999)}&nologo=true"
 
             resp = self.session.get(url, timeout=30)
             resp.raise_for_status()

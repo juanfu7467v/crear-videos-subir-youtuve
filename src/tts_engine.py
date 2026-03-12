@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import random
 from pathlib import Path
 import edge_tts
 import re
@@ -11,8 +12,7 @@ logger = logging.getLogger(__name__)
 AVAILABLE_VOICES = {
     "mx_female": "es-MX-DaliaNeural",
     "mx_male":   "es-MX-JorgeNeural",
-    "es_female": "es-ES-ElviraNeural",
-    "es_male":   "es-ES-AlvaroNeural",
+    "mx_male_2": "es-MX-EmilioNeural",
 }
 
 class TTSEngine:
@@ -20,13 +20,27 @@ class TTSEngine:
         self.default_voice = os.getenv("DEFAULT_VOICE", "es-MX-JorgeNeural")
         self.default_rate  = os.getenv("DEFAULT_SPEECH_RATE", "+10%")
         self.default_pitch = os.getenv("DEFAULT_PITCH", "+0Hz")
+        self.voices_list = ["es-MX-DaliaNeural", "es-MX-EmilioNeural", "es-MX-JorgeNeural"]
 
     def _get_valid_voice(self, voice_input: str) -> str:
+        # Si se solicita 'random', elegir una al azar
+        if voice_input == "random":
+            selected = random.choice(self.voices_list)
+            logger.info(f"Voz aleatoria seleccionada: {selected}")
+            return selected
+            
+        if voice_input in self.voices_list: return voice_input
         if voice_input in AVAILABLE_VOICES.values(): return voice_input
-        return AVAILABLE_VOICES.get(voice_input, self.default_voice)
+        
+        mapped = AVAILABLE_VOICES.get(voice_input)
+        if mapped: return mapped
+        
+        return self.default_voice
 
     def generate_audio(self, text: str, output_path: str, voice: str = None, rate: str = None, pitch: str = None) -> str:
-        voice = self._get_valid_voice(voice or self.default_voice)
+        # Si no viene voz, o viene algo no reconocido, podemos forzar aleatoriedad si así se desea
+        # Pero para mantener compatibilidad, si viene None usamos el default o random si así se configura
+        voice = self._get_valid_voice(voice or "random")
         rate  = rate  or self.default_rate
         pitch = pitch or self.default_pitch
 
