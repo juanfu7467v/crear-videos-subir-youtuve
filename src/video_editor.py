@@ -3,7 +3,6 @@ import os
 import random
 from pathlib import Path
 from PIL import Image
-import whisper
 import numpy as np
 
 # PARCHE: Esto obliga a que MoviePy encuentre la propiedad que busca
@@ -11,16 +10,14 @@ Image.ANTIALIAS = Image.Resampling.LANCZOS
 
 from moviepy.editor import (
     VideoFileClip, ImageClip, AudioFileClip, concatenate_videoclips, 
-    CompositeVideoClip, TextClip, ColorClip, afx
+    CompositeVideoClip, afx
 )
 
 logger = logging.getLogger(__name__)
 
 class VideoEditor:
     def __init__(self):
-        # Cargar el modelo de Whisper (base es suficiente para velocidad y precisión aceptable)
-        logger.info("Cargando modelo Whisper...")
-        self.whisper_model = whisper.load_model("base")
+        logger.info("Inicializando VideoEditor...")
 
     def create_video(self, audio_path, media_list, script_data, format_type, output_path, music_dir="assets/music"):
         is_short = "short" in format_type.lower()
@@ -61,38 +58,7 @@ class VideoEditor:
         # Concatenar y ajustar a la duración del audio
         visual_base = concatenate_videoclips(clips, method="compose").set_duration(duration)
         
-        # 3. Generar Subtítulos con Whisper
-        logger.info("Generando subtítulos con Whisper...")
-        result = self.whisper_model.transcribe(audio_path, language="es")
-        segments = result.get("segments", [])
-        
-        subtitle_clips = []
-        for seg in segments:
-            text = seg["text"].strip().upper()
-            start = seg["start"]
-            end = seg["end"]
-            
-            if not text: continue
-            
-            # Crear clip de texto animado (simple pero atractivo)
-            # Nota: Requiere ImageMagick instalado para TextClip
-            try:
-                txt_clip = TextClip(
-                    text, 
-                    fontsize=70 if is_short else 50, 
-                    color='yellow', 
-                    font='Arial-Bold', # O usar el de assets/fonts si está configurado
-                    stroke_color='black',
-                    stroke_width=2,
-                    method='caption',
-                    size=(target_w * 0.8, None)
-                ).set_start(start).set_end(end).set_position(('center', target_h * 0.7))
-                
-                subtitle_clips.append(txt_clip)
-            except Exception as e:
-                logger.warning(f"No se pudo crear clip de texto: {e}. Asegúrate de tener ImageMagick.")
-        
-        # 4. Añadir Música de Fondo Aleatoria
+        # 3. Añadir Música de Fondo Aleatoria
         final_audio = tts_audio
         try:
             music_files = list(Path(music_dir).glob("*.mp3"))
@@ -114,8 +80,8 @@ class VideoEditor:
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
-        # 5. Componer Video Final
-        final_video = CompositeVideoClip([visual_base] + subtitle_clips).set_audio(final_audio)
+        # 4. Componer Video Final (Sin subtítulos)
+        final_video = CompositeVideoClip([visual_base]).set_audio(final_audio)
         
         logger.info(f"Renderizando video final en {output_path}...")
         final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", logger=None)

@@ -7,15 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    imagemagick \
     fonts-liberation \
     ca-certificates \
     wget \
     tzdata \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-RUN sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-6/policy.xml || true
 
 WORKDIR /app
 
