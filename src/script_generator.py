@@ -7,118 +7,92 @@ import os
 logger = logging.getLogger(__name__)
 
 class ScriptGenerator:
+    """
+    Generador de guiones optimizado para la API v1 de Gemini y modelos de la serie 2.5.
+    Mantiene compatibilidad con el pipeline de video existente.
+    """
     def __init__(self, api_key: str):
         self.api_key = api_key.strip()
-        # Usar modelo por defecto: alias estable más reciente de Gemini Flash
-        self.model = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
-        # Usar la versión estable de la API (v1)
-        self.api_version = "v1"
-        self.base_url = f"https://generativelanguage.googleapis.com/{self.api_version}"
-        # Endpoint inicial para generar contenido
-        self.url = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
+        # En marzo de 2026, gemini-2.5-flash es el modelo estable recomendado.
+        # Se puede usar 'gemini-flash-latest' para apuntar siempre a la última versión estable.
+        self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        
+        # Corrección Crítica: Se utiliza el endpoint estable 'v1' en lugar de 'v1beta'.
+        # El prefijo 'models/' es requerido por la especificación de la API de Google.
+        self.url = f"https://generativelanguage.googleapis.com/v1/models/{self.model}:generateContent?key={self.api_key}"
 
     def generate_full_script(self, trend_data: dict) -> dict:
+        """
+        Genera guiones en formato JSON utilizando el modo nativo de la API.
+        """
         topic = trend_data.get('topic', 'curiosidades interesantes')
-
+        
+        # Prompt optimizado para evitar texto explicativo innecesario
         prompt = (
-            f"Eres un experto creador de contenido para YouTube Shorts. "
-            f"Tema del video: '{topic}'. "
-            "Reglas estrictas: "
-            "1. Escribe un guion completo y detallado para un video de 60 segundos. "
-            "2. El guion debe iniciar con un 'Hook' impactante de 3 segundos para el canal 'El Tío Jota'. "
-            "3. El contenido debe ser emocionante, educativo y viral. "
-            "4. Responde ÚNICAMENTE en formato JSON plano (sin bloques de código markdown, sin texto extra). "
-            "Estructura del JSON: { "
-            "'title': 'Título llamativo', "
-            "'full_script': 'Guion extenso y detallado para 60 segundos de narración', "
-            "'keywords': 'palabras clave separadas por comas', "
-            "'voice': 'random', "
-            "'description': 'Descripción optimizada para YouTube', "
-            "'tags': 'etiquetas separadas por comas' "
-            "}"
+            f"Actúa como un experto guionista de YouTube Shorts para el canal 'El Tío Jota'. "
+            f"Tema: '{topic}'. "
+            "Requerimientos: "
+            "1. Guion de 60 segundos exactos con un hook inicial potente. "
+            "2. Estilo educativo, viral y dinámico. "
+            "3. La respuesta debe ser exclusivamente el objeto JSON sin formato markdown."
+            "Campos requeridos: title, full_script, keywords, voice, description, tags."
         )
-
+        
         try:
+            # Configuración de generación para asegurar salida JSON pura
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {
+                    # Activación del modo JSON nativo soportado en la API v1
                     "response_mime_type": "application/json",
-                    "temperature": 0.7
+                    "temperature": 0.7,
+                    "top_p": 0.95,
+                    "maxOutputTokens": 2048
                 }
             }
-            # Intentar generar contenido; si falla con 404, actualizar modelo
-            for attempt in range(2):
-                response = requests.post(self.url, json=payload, timeout=60)
-                # Éxito en llamada a la API
-                if response.status_code == 200:
-                    break
-                # Si el modelo no existe (404) en primer intento, obtener lista de modelos
-                if response.status_code == 404 and attempt == 0:
-                    logger.warning(f"Modelo '{self.model}' no encontrado. Obteniendo lista de modelos disponibles...")
-                    list_url = f"{self.base_url}/models?key={self.api_key}"
-                    try:
-                        list_resp = requests.get(list_url, timeout=10)
-                        if list_resp.status_code == 200:
-                            models = list_resp.json().get("models", [])
-                            best_model = None
-                            best_version = (0, 0)
-                            # Seleccionar el modelo Gemini Flash estable de mayor versión
-                            for m in models:
-                                name = m.get("name", "")
-                                if not name.startswith("models/gemini-"):
-                                    continue
-                                short_name = name.split("/", 1)[1]  # quitar prefijo "models/"
-                                parts = short_name.split("-")
-                                if len(parts) < 3 or parts[0] != "gemini" or parts[2] != "flash":
-                                    continue
-                                # Evitar versiones de preview, experimental o flash-lite
-                                if any(x in parts for x in ["preview", "exp", "lite"]):
-                                    continue
-                                # Extraer versión mayor y menor
-                                ver_parts = parts[1].split(".")
-                                try:
-                                    major = int(ver_parts[0])
-                                    minor = int(ver_parts[1]) if len(ver_parts) > 1 else 0
-                                except ValueError:
-                                    continue
-                                if (major, minor) > best_version:
-                                    best_version = (major, minor)
-                                    best_model = short_name
-                            if best_model:
-                                logger.info(f"Actualizando modelo a '{best_model}'.")
-                                self.model = best_model
-                                self.url = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
-                                continue  # reintentar con el nuevo modelo
-                    except Exception as e_list:
-                        logger.error(f"Error al obtener lista de modelos: {e_list}")
-                # Otros errores
-                logger.error(f"Error API {response.status_code}: {response.text}")
-                return self._get_fallback(topic)
-            # Tras intentos, verificar respuesta
-            if response.status_code != 200:
-                logger.error(f"Fallo después de reintentos, estado {response.status_code}.")
+            
+            # Timeout de 60 segundos para permitir el razonamiento del modelo 2.5
+            response = requests.post(self.url, json=payload, timeout=60)
+            
+            if response.status_code!= 200:
+                logger.error(f"Error de API (Status {response.status_code}): {response.text}")
                 return self._get_fallback(topic)
 
             data = response.json()
-            # Extraer texto del candidato
-            text_response = data['candidates'][0]['content']['parts'][0]['text']
-
-            # Limpiar posibles delimitadores de bloque JSON
+            
+            # Validación de la existencia de candidatos en la respuesta
+            if not data.get('candidates') or not data['candidates'].get('content'):
+                logger.error("La API devolvió una respuesta vacía o bloqueada por seguridad.")
+                return self._get_fallback(topic)
+                
+            text_response = data['candidates']['content']['parts']['text']
+            
+            # Limpieza defensiva en caso de que el modelo incluya caracteres extra
             cleaned_text = re.sub(r'^```json\s*|\s*```$', '', text_response.strip(), flags=re.MULTILINE)
-
+            
             return json.loads(cleaned_text)
-
+            
+        except json.JSONDecodeError as jde:
+            logger.error(f"Fallo al decodificar JSON: {jde}. Respuesta cruda: {text_response}")
+            return self._get_fallback(topic)
         except Exception as e:
             logger.error(f"Error crítico en la generación con Gemini: {e}")
             return self._get_fallback(topic)
 
     def _get_fallback(self, topic: str):
-        """Estructura de respaldo detallada para evitar videos cortos."""
+        """
+        Mecanismo de seguridad para garantizar que el pipeline siempre tenga contenido.
+        """
         return {
-            "title": f"Lo que no sabías de {topic}",
-            "full_script": f"¡Detente! ¿Alguna vez te has preguntado sobre {topic}? En este video de El Tío Jota, vamos a desglosar los datos más alucinantes que cambiarán tu forma de ver este tema. Acompáñame en este recorrido rápido y lleno de información curiosa. No olvides suscribirte para más contenido fascinante cada día.",
-            "voice": "random",
-            "keywords": f"{topic}, viral, datos curiosos, historia",
-            "description": f"Descubre los secretos de {topic} con El Tío Jota. Un video corto pero lleno de información impactante.",
+            "title": f"Secretos revelados: {topic}", 
+            "full_script": (
+                f"¡Oye tú! ¿Sabías esto sobre {topic}? En este video de El Tío Jota "
+                "vamos a descubrir datos que te dejarán con la boca abierta. Quédate "
+                "hasta el final porque el último dato es simplemente increíble. "
+                "No olvides suscribirte para tu dosis diaria de conocimiento."
+            ), 
+            "voice": "random", 
+            "keywords": f"{topic}, viral, shorts, curiosidades", 
+            "description": f"Descubre todo sobre {topic} en este Short de El Tío Jota.", 
             "tags": "curiosidades, viral, shorts, eltiojota, educativo"
         }
