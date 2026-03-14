@@ -7,92 +7,58 @@ import os
 logger = logging.getLogger(__name__)
 
 class ScriptGenerator:
-    """
-    Generador de guiones optimizado para la API v1 de Gemini y modelos de la serie 2.5.
-    Mantiene compatibilidad con el pipeline de video existente.
-    """
     def __init__(self, api_key: str):
         self.api_key = api_key.strip()
-        # En marzo de 2026, gemini-2.5-flash es el modelo estable recomendado.
-        # Se puede usar 'gemini-flash-latest' para apuntar siempre a la última versión estable.
-        self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        
-        # Corrección Crítica: Se utiliza el endpoint estable 'v1' en lugar de 'v1beta'.
-        # El prefijo 'models/' es requerido por la especificación de la API de Google.
-        self.url = f"https://generativelanguage.googleapis.com/v1/models/{self.model}:generateContent?key={self.api_key}"
+        self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent?key={self.api_key}"
+        )
 
     def generate_full_script(self, trend_data: dict) -> dict:
-        """
-        Genera guiones en formato JSON utilizando el modo nativo de la API.
-        """
-        topic = trend_data.get('topic', 'curiosidades interesantes')
+        topic = trend_data.get('topic', 'curiosidades')
         
-        # Prompt optimizado para evitar texto explicativo innecesario
+        # MEJORA: Instrucción explícita para el Hook de 3 segundos
         prompt = (
-            f"Actúa como un experto guionista de YouTube Shorts para el canal 'El Tío Jota'. "
-            f"Tema: '{topic}'. "
-            "Requerimientos: "
-            "1. Guion de 60 segundos exactos con un hook inicial potente. "
-            "2. Estilo educativo, viral y dinámico. "
-            "3. La respuesta debe ser exclusivamente el objeto JSON sin formato markdown."
-            "Campos requeridos: title, full_script, keywords, voice, description, tags."
+            f"Tema: {topic}. Genera un guion para un video de YouTube Short. "
+            "IMPORTANTE: El guion DEBE comenzar con un 'Hook' (gancho) impactante de aproximadamente 3 segundos "
+            "que llame la atención del espectador de inmediato para el canal 'El Tío Jota'. "
+            "Responde SOLO un JSON sin formato markdown, con estos campos: "
+            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags'. "
+            "En el campo 'voice', pon siempre 'random'."
         )
         
         try:
-            # Configuración de generación para asegurar salida JSON pura
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    # Activación del modo JSON nativo soportado en la API v1
-                    "response_mime_type": "application/json",
-                    "temperature": 0.7,
-                    "top_p": 0.95,
-                    "maxOutputTokens": 2048
-                }
+                "generationConfig": {"response_mime_type": "application/json"}
             }
             
-            # Timeout de 60 segundos para permitir el razonamiento del modelo 2.5
-            response = requests.post(self.url, json=payload, timeout=60)
+            response = requests.post(self.url, json=payload, timeout=30)
             
-            if response.status_code!= 200:
-                logger.error(f"Error de API (Status {response.status_code}): {response.text}")
-                return self._get_fallback(topic)
+            if response.status_code != 200:
+                logger.error(f"Error API {response.status_code}: {response.text}")
+                return self._get_fallback()
 
             data = response.json()
+            text_response = data['candidates'][0]['content']['parts'][0]['text']
             
-            # Validación de la existencia de candidatos en la respuesta
-            if not data.get('candidates') or not data['candidates'].get('content'):
-                logger.error("La API devolvió una respuesta vacía o bloqueada por seguridad.")
-                return self._get_fallback(topic)
-                
-            text_response = data['candidates']['content']['parts']['text']
+            raw = re.search(r'\{.*\}', text_response, re.DOTALL)
+            if raw:
+                return json.loads(raw.group(0))
+            return json.loads(text_response)
             
-            # Limpieza defensiva en caso de que el modelo incluya caracteres extra
-            cleaned_text = re.sub(r'^```json\s*|\s*```$', '', text_response.strip(), flags=re.MULTILINE)
-            
-            return json.loads(cleaned_text)
-            
-        except json.JSONDecodeError as jde:
-            logger.error(f"Fallo al decodificar JSON: {jde}. Respuesta cruda: {text_response}")
-            return self._get_fallback(topic)
         except Exception as e:
             logger.error(f"Error crítico en la generación con Gemini: {e}")
-            return self._get_fallback(topic)
+            return self._get_fallback()
 
-    def _get_fallback(self, topic: str):
-        """
-        Mecanismo de seguridad para garantizar que el pipeline siempre tenga contenido.
-        """
+    def _get_fallback(self):
+        """Devuelve una estructura válida si la API falla para no romper el pipeline."""
         return {
-            "title": f"Secretos revelados: {topic}", 
-            "full_script": (
-                f"¡Oye tú! ¿Sabías esto sobre {topic}? En este video de El Tío Jota "
-                "vamos a descubrir datos que te dejarán con la boca abierta. Quédate "
-                "hasta el final porque el último dato es simplemente increíble. "
-                "No olvides suscribirte para tu dosis diaria de conocimiento."
-            ), 
+            "title": "Misterios Increíbles", 
+            "full_script": "¡Detente! ¿Sabías que lo que estás a punto de ver cambiará tu forma de pensar? Bienvenidos a El Tío Jota, hoy exploramos un tema fascinante.", 
             "voice": "random", 
-            "keywords": f"{topic}, viral, shorts, curiosidades", 
-            "description": f"Descubre todo sobre {topic} en este Short de El Tío Jota.", 
-            "tags": "curiosidades, viral, shorts, eltiojota, educativo"
+            "keywords": "misterio, viral, curiosidades", 
+            "description": "Explorando misterios con El Tío Jota.", 
+            "tags": "misterio, viral, curiosidades, shorts"
         }
