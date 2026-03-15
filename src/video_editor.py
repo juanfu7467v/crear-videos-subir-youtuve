@@ -50,15 +50,16 @@ class VideoEditor:
             if clip.w > target_w:
                 x1 = (clip.w - target_w) // 2
                 x2 = x1 + target_w
+                # Asegurar que el recorte sea exacto al ancho objetivo
                 clip = clip.crop(x1=x1, y1=0, x2=x2, y2=target_h)
+                if clip.w != target_w:
+                    clip = clip.resize(width=target_w)
             elif clip.w < target_w:
                 # Si es más estrecho, lo centramos con márgenes negros
-                left = (target_w - clip.w) // 2
-                right = (target_w - clip.w) // 2
+                diff = target_w - clip.w
+                left = diff // 2
+                right = diff - left # Esto maneja automáticamente anchos impares
                 clip = clip.margin(left=left, right=right, color=(0,0,0))
-                # Ajuste por redondeo si el ancho es impar
-                if clip.w < target_w:
-                    clip = clip.margin(right=target_w - clip.w, color=(0,0,0))
             
             clip = clip.set_duration(clip_duration).set_start(current_time)
             clips.append(clip)
