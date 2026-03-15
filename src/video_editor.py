@@ -46,9 +46,19 @@ class VideoEditor:
             clip_duration = 5 if item_type == "image" else clip.duration
             clip = clip.resize(height=target_h)
             
-            # Centrar si es más ancho que el objetivo
+            # Centrar y recortar si es más ancho que el objetivo
             if clip.w > target_w:
-                clip = clip.margin(left=-(clip.w - target_w)//2, right=-(clip.w - target_w)//2)
+                x1 = (clip.w - target_w) // 2
+                x2 = x1 + target_w
+                clip = clip.crop(x1=x1, y1=0, x2=x2, y2=target_h)
+            elif clip.w < target_w:
+                # Si es más estrecho, lo centramos con márgenes negros
+                left = (target_w - clip.w) // 2
+                right = (target_w - clip.w) // 2
+                clip = clip.margin(left=left, right=right, color=(0,0,0))
+                # Ajuste por redondeo si el ancho es impar
+                if clip.w < target_w:
+                    clip = clip.margin(right=target_w - clip.w, color=(0,0,0))
             
             clip = clip.set_duration(clip_duration).set_start(current_time)
             clips.append(clip)
