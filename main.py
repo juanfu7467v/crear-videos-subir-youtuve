@@ -57,7 +57,8 @@ class VideoAutoPipeline:
             input_data = {
                 "topic": topic,
                 "suggested_title": title_suggested,
-                "content_idea": content_idea
+                "content_idea": content_idea,
+                "canal": trend_data.get('canal', 'El Tío Jota')
             }
             script_data = self.script_gen.generate_full_script(input_data)
             

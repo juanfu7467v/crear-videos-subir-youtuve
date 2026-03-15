@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key.strip()
-        self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{self.model}:generateContent?key={self.api_key}"
@@ -17,12 +17,13 @@ class ScriptGenerator:
 
     def generate_full_script(self, trend_data: dict) -> dict:
         topic = trend_data.get('topic', 'curiosidades')
+        canal = trend_data.get('canal', 'El Tío Jota')
         
         # MEJORA: Instrucción explícita para el Hook de 3 segundos
         prompt = (
             f"Tema: {topic}. Genera un guion para un video de YouTube Short. "
             "IMPORTANTE: El guion DEBE comenzar con un 'Hook' (gancho) impactante de aproximadamente 3 segundos "
-            "que llame la atención del espectador de inmediato para el canal 'El Tío Jota'. "
+            f"que llame la atención del espectador de inmediato para el canal '{canal}'. "
             "Responde SOLO un JSON sin formato markdown, con estos campos: "
             "'title', 'full_script', 'keywords', 'voice', 'description', 'tags'. "
             "En el campo 'voice', pon siempre 'random'."
