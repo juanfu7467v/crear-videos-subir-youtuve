@@ -26,7 +26,7 @@ class ScriptGenerator:
             f"que llame la atención del espectador de inmediato para el canal '{canal}'. "
             "Responde SOLO un JSON sin formato markdown, con estos campos: "
             "'title', 'full_script', 'keywords', 'voice', 'description', 'tags'. "
-            "En el campo 'voice', pon siempre 'random'."
+            "En el campo 'voice', pon siempre 'es-MX-DaliaNeural'."
         )
         
         try:

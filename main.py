@@ -32,7 +32,7 @@ class VideoAutoPipeline:
         self.media_fetcher   = MediaFetcher(os.getenv("PEXELS_API_KEY", ""), os.getenv("PIXABAY_API_KEY", ""))
         self.video_editor    = VideoEditor()
         self.quality_checker = QualityChecker(os.getenv("GEMINI_API_KEY", ""))
-        self.yt_uploader     = YouTubeUploader("credentials/youtube_credentials.json")
+        self.yt_uploader     = YouTubeUploader()
         self.scheduler       = VideoScheduler()
 
     def run_full_pipeline_with_data(self, trend_data: dict):
@@ -58,7 +58,7 @@ class VideoAutoPipeline:
                 "topic": topic,
                 "suggested_title": title_suggested,
                 "content_idea": content_idea,
-                "canal": trend_data.get('canal', 'El Tío Jota')
+                "canal": trend_data.get('canal', 'CHANNEL_NAME')
             }
             script_data = self.script_gen.generate_full_script(input_data)
             
@@ -73,7 +73,7 @@ class VideoAutoPipeline:
             self.tts_engine.generate_audio(
                 text=script_data.get('full_script', ''),
                 output_path=audio_path,
-                voice=script_data.get('voice')
+                voice='es-MX-DaliaNeural'
             )
             
             # 3. Descargar Media (Videos/Imágenes)
@@ -84,7 +84,7 @@ class VideoAutoPipeline:
             
             media_list = self.media_fetcher.fetch_media_for_video(
                 keywords=keywords,
-                target_duration=int(duration),
+                target_duration=max(int(duration), 120),
                 save_dir="assets/temp",
                 video_id=video_id,
                 prefer_video=True
@@ -115,6 +115,7 @@ class VideoAutoPipeline:
                 title=video_title,
                 description=script_data.get('description', ''),
                 tags=script_data.get('tags', []),
+                channel_name=trend_data.get('canal', 'CHANNEL_NAME'),
                 is_short=("short" in format_suggested.lower()),
                 publish_at=publish_time,
                 thumbnail_path=thumbnail_path

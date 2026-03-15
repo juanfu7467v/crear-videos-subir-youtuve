@@ -20,16 +20,17 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 class YouTubeUploader:
     # ACEPTAMOS EL ARGUMENTO PARA QUE MAIN.PY NO SE QUEJE
-    def __init__(self, credentials_path: str = None):
-        self.credentials_path = credentials_path
+    def __init__(self):
+
         self.youtube = None
         self._initialized = False
 
-    def _load_credentials_from_secrets(self):
+    def _load_credentials_from_secrets(self, channel_name: str):
         """Carga credenciales desde el secreto de Fly."""
-        creds_json = os.getenv("YOUTUBE_CREDENTIALS_FILE")
+        creds_env_var = f"YOUTUBE_CREDENTIALS_FILE_{channel_name.upper()}" if channel_name != "CHANNEL_NAME" else "YOUTUBE_CREDENTIALS_FILE"
+        creds_json = os.getenv(creds_env_var)
         if not creds_json:
-            logger.error("No se encontró el secreto YOUTUBE_CREDENTIALS_FILE")
+            logger.error(f"No se encontró el secreto {creds_env_var}")
             return None
 
         try:
@@ -43,18 +44,22 @@ class YouTubeUploader:
             logger.error(f"Error procesando credenciales: {e}")
             return None
 
-    def _initialize(self) -> bool:
-        if self._initialized: return True
-        creds = self._load_credentials_from_secrets()
+    def _initialize(self, channel_name: str) -> bool:
+        # Reinicializar si el canal es diferente
+        if self._initialized and self._current_channel == channel_name: return True
+        
+        self._current_channel = channel_name
+        self._initialized = False # Forzar reinicialización si el canal cambia
+        creds = self._load_credentials_from_secrets(channel_name)
         if creds:
             self.youtube = build("youtube", "v3", credentials=creds)
             self._initialized = True
             return True
         return False
 
-    def upload(self, video_path: str, title: str, description: str = "", **kwargs) -> str:
+    def upload(self, video_path: str, title: str, description: str = "", channel_name: str = "CHANNEL_NAME", **kwargs) -> str:
         # Intentamos inicializar. Si no hay creds, se va por el fallback.
-        if not self._initialize():
+        if not self._initialize(channel_name):
             logger.warning("No se pudo inicializar YouTube (Subida simulada).")
             return "https://youtu.be/SIMULADO"
 
