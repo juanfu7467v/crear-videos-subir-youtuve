@@ -1,7 +1,4 @@
-# fly.toml app configuration file generated for crear-videos-subir-youtuve on 2026-03-13T22:56:10Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# fly.toml app configuration file for crear-videos-subir-youtuve
 
 app = 'crear-videos-subir-youtuve'
 primary_region = 'iad'
@@ -11,13 +8,15 @@ primary_region = 'iad'
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = 'stop'
+  # Desactivamos el autostop para que no mate el proceso de renderizado
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  # Mantenemos una máquina activa para asegurar que termine las tareas de fondo
+  min_machines_running = 1
   processes = ['app']
 
 [[vm]]
-  memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 1024
+  # Subido a 2GB de RAM para evitar el error Out of Memory (OOM)
+  memory_mb = 2048
