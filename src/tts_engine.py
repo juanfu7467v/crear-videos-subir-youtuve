@@ -46,6 +46,8 @@ class TTSEngine:
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         text = self._clean_text(text)
+        # Limitar la longitud del texto para evitar errores de Edge-TTS con textos muy largos
+        text = text[:8000]
         
         logger.info(f"Generando TTS con voz: {voice}")
         
@@ -69,5 +71,34 @@ class TTSEngine:
             return 5.0 # Duración por defecto si falla ffprobe
 
     def _clean_text(self, text: str) -> str:
-        text = re.sub(r'[^\w\s\.,!?¿¡\-:;áéíóúüñÁÉÍÓÚÜÑ\(\)\"\']+', ' ', text)
-        return text.strip()[:8000]
+        # Eliminar estructuras JSON si se colaron (ej: {"full_script": "..."})
+        if text.startswith('{') and '}' in text:
+            try:
+                import json
+                data = json.loads(text)
+                if isinstance(data, dict):
+                    text = data.get('full_script', text)
+            except:
+                pass
+                
+        # Eliminar etiquetas de formato markdown como **texto** o __texto__
+        text = re.sub(r'\*\*|__', '', text)
+        
+        # Eliminar comillas dobles y simples que suelen venir del JSON
+        text = text.replace('"', '').replace("'", "")
+        
+        # Eliminar guiones que se usan para listas pero se leen como "guion"
+        # Solo si están al inicio de una línea o seguidos de espacio
+        text = re.sub(r'(^|\s)-\s+', r'\1 ', text)
+        
+        # Eliminar otros símbolos problemáticos que no sean puntuación básica
+        text = re.sub(r'[{|\\\\\[\]<>]', ' ', text)
+        
+        # Eliminar números si no están asociados a texto (ej: "cero trece" vs "13")
+        # Esto es más complejo y podría requerir un enfoque más inteligente.
+        # Por ahora, nos enfocamos en los símbolos y comillas.
+        
+        # Normalizar espacios
+        text = re.sub(r'\s+', ' ', text)
+        
+        return text.strip()
