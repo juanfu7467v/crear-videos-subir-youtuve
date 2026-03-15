@@ -1,5 +1,3 @@
-# fly.toml app configuration file for crear-videos-subir-youtuve
-
 app = 'crear-videos-subir-youtuve'
 primary_region = 'iad'
 
@@ -8,15 +6,16 @@ primary_region = 'iad'
 [http_service]
   internal_port = 8080
   force_https = true
-  # Desactivamos el autostop para que no mate el proceso de renderizado
-  auto_stop_machines = false
+  # Permitimos el auto-stop para ahorrar costos
+  auto_stop_machines = true
   auto_start_machines = true
-  # Mantenemos una máquina activa para asegurar que termine las tareas de fondo
-  min_machines_running = 1
+  # El tiempo se define en segundos: 40 minutos = 2400 segundos
+  auto_stop_timeout = 2400
+  # Cambiamos a 0 para que la máquina pueda apagarse si no hay actividad
+  min_machines_running = 0
   processes = ['app']
 
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
-  # Subido a 2GB de RAM para evitar el error Out of Memory (OOM)
   memory_mb = 2048
