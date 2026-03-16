@@ -102,7 +102,7 @@ class VideoEditor:
         # Usar un preset más rápido para libx264 sin sacrificar demasiada calidad
         # 'medium' es un buen balance entre velocidad y calidad. 'fast' o 'veryfast' son más rápidos.
         # También se puede ajustar el bitrate si se quiere controlar el tamaño del archivo, pero no se pidió.
-        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", logger=None, preset="medium")
+        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", logger=None, preset="medium", threads=1)
         
         # Limpieza
         final_video.close()

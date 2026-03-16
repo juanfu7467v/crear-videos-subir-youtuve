@@ -129,8 +129,6 @@ class VideoAutoPipeline:
             )
             
             logger.info(f"✅ Proceso completado con éxito!")
-            self._stop_keep_alive()
-
             logger.info(f"🔗 URL: {video_url}")
             logger.info(f"📅 Programado para: {publish_time}")
 
