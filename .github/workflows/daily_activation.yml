@@ -1,0 +1,16 @@
+name: Activación Diaria Sistema YouTube
+
+on:
+  schedule:
+    # 5:00 AM UTC (Ajusta según tu zona horaria si es necesario)
+    - cron: '0 5 * * *'
+  workflow_dispatch: # Permite ejecutarlo manualmente para probar
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar al Endpoint de Fly.io
+        run: |
+          curl -X POST https://sistema-analisis-canales.fly.dev/start-autonomous-job \
+          -H "Content-Type: application/json"
