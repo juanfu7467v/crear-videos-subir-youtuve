@@ -19,6 +19,12 @@ class PipelineHandler(BaseHTTPRequestHandler):
         self._send_cors_headers()
         self.end_headers()
 
+    def do_GET(self):
+        if self.path == "/keep-alive":
+            self._respond(200, {"status": "alive"})
+        else:
+            self._respond(404, {"error": "Ruta no encontrada"})
+
     def do_POST(self):
         if self.path == "/trigger-video":
             try:
