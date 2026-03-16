@@ -71,7 +71,8 @@ class TTSEngine:
             return 5.0 # Duración por defecto si falla ffprobe
 
     def _clean_text(self, text: str) -> str:
-        # Eliminar estructuras JSON si se colaron (ej: {"full_script": "..."})
+        """Limpia el texto para una narración fluida y profesional."""
+        # Eliminar estructuras JSON si se colaron
         if text.startswith('{') and '}' in text:
             try:
                 import json
@@ -81,24 +82,26 @@ class TTSEngine:
             except:
                 pass
                 
-        # Eliminar etiquetas de formato markdown como **texto** o __texto__
+        # Eliminar etiquetas de formato markdown
         text = re.sub(r'\*\*|__', '', text)
+        text = re.sub(r'#+\s+', '', text) # Títulos markdown
         
-        # Eliminar comillas dobles y simples que suelen venir del JSON
-        text = text.replace('"', '').replace("'", "")
+        # Eliminar comillas y caracteres de escape
+        text = text.replace('"', '').replace("'", "").replace('\\n', ' ').replace('\\', '')
         
-        # Eliminar guiones que se usan para listas pero se leen como "guion"
-        # Solo si están al inicio de una línea o seguidos de espacio
-        text = re.sub(r'(^|\s)-\s+', r'\1 ', text)
+        # MEJORA: Eliminar guiones bajos, rayas y símbolos que se leen literalmente
+        text = text.replace('_', ' ')
+        text = text.replace(' - ', ' ') # Rayas de diálogo o separación
+        text = re.sub(r'[-—–]', ' ', text) # Diferentes tipos de guiones/rayas
         
-        # Eliminar otros símbolos problemáticos que no sean puntuación básica
-        text = re.sub(r'[{|\\\\\[\]<>]', ' ', text)
+        # Eliminar otros símbolos técnicos
+        text = re.sub(r'[{|\[\]<>/@#$%^&*+=~]', ' ', text)
         
-        # Eliminar números si no están asociados a texto (ej: "cero trece" vs "13")
-        # Esto es más complejo y podría requerir un enfoque más inteligente.
-        # Por ahora, nos enfocamos en los símbolos y comillas.
+        # Normalizar puntuación para que el TTS haga pausas correctas
+        text = text.replace('...', '.')
+        text = re.sub(r'\s+([,.?!])', r'\1', text) # Eliminar espacios antes de puntuación
         
-        # Normalizar espacios
+        # Normalizar espacios múltiples
         text = re.sub(r'\s+', ' ', text)
         
         return text.strip()

@@ -20,13 +20,19 @@ class VideoEditor:
         logger.info("Inicializando VideoEditor...")
 
     def create_video(self, audio_path, media_list, script_data, format_type, output_path, music_dir="assets/music"):
-        is_short = "short" in format_type.lower()
+        # 1. Cargar Audio Principal (TTS) para determinar duración
+        tts_audio = AudioFileClip(audio_path)
+        duration = tts_audio.duration
+
+        # Determinar si es Short basado en duración (máximo 60s para YouTube Shorts)
+        # El usuario pidió 60-70s pero YouTube corta a los 60s para Shorts.
+        is_short = duration <= 60.0
+        
+        # Forzar resolución 9:16 para Shorts (1080x1920) y 16:9 para largos (1920x1080)
         target_h = 1920 if is_short else 1080
         target_w = 1080 if is_short else 1920
         
-        # 1. Cargar Audio Principal (TTS)
-        tts_audio = AudioFileClip(audio_path)
-        duration = tts_audio.duration
+        logger.info(f"Formato detectado: {'Short (9:16)' if is_short else 'Largo (16:9)'} - Duración: {duration:.2f}s")
         
         # 2. Preparar Clips Visuales
         clips = []
@@ -76,8 +82,8 @@ class VideoEditor:
                 logger.info(f"Añadiendo música de fondo: {bg_music_path.name}")
                 bg_music = AudioFileClip(str(bg_music_path))
                 
-                # Ajustar volumen (bajo para no interferir) y loopear si es necesario
-                bg_music = bg_music.volumex(0.15)
+                # Ajustar volumen (muy bajo para no interferir con la voz principal)
+                bg_music = bg_music.volumex(0.08)
                 if bg_music.duration < duration:
                     bg_music = afx.audio_loop(bg_music, duration=duration)
                 else:

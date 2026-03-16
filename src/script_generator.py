@@ -19,14 +19,28 @@ class ScriptGenerator:
         topic = trend_data.get('topic', 'curiosidades')
         canal = trend_data.get('canal', 'El Tío Jota')
         
-        # MEJORA: Instrucción explícita para el Hook de 3 segundos
+        # Definir estilo según el canal
+        if "Criterio" in canal:
+            estilo = "serio, analítico, profesional y directo. Enfocado en la verdad y el análisis crítico."
+            voz = "es-MX-JorgeNeural" # Voz masculina más seria
+        else:
+            estilo = "entusiasta, curioso, cercano y muy dinámico. Enfocado en sorprender al espectador con datos increíbles."
+            voz = "es-MX-DaliaNeural" # Voz femenina carismática
+
+        # MEJORA: Prompt ultra-detallado para coherencia y profesionalismo
         prompt = (
-            f"Tema: {topic}. Genera un guion para un video de YouTube Short. "
-            "IMPORTANTE: El guion DEBE comenzar con un 'Hook' (gancho) impactante de aproximadamente 3 segundos "
-            f"que llame la atención del espectador de inmediato para el canal '{canal}'. "
-            "Responde SOLO un JSON sin formato markdown, con estos campos: "
-            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags'. "
-            "En el campo 'voice', pon siempre 'es-MX-DaliaNeural'."
+            f"Actúa como un experto guionista de YouTube. Crea un guion para el canal '{canal}'.\n"
+            f"Tema: {topic}\n"
+            f"Estilo del canal: {estilo}\n\n"
+            "REQUISITOS DEL GUION:\n"
+            "1. HOOK (0-3s): Empieza con una pregunta o dato impactante que obligue a seguir viendo.\n"
+            "2. DESARROLLO: Narración fluida, sin rellenos, manteniendo la tensión o el interés.\n"
+            "3. CIERRE: Un llamado a la acción rápido (suscríbete, comenta) integrado en la narrativa.\n"
+            "4. LIMPIEZA: No uses símbolos como (*, _, -, #) dentro del 'full_script'.\n"
+            "5. COHERENCIA VISUAL: El campo 'keywords' debe contener 8-10 términos descriptivos en inglés "
+            "separados por comas que representen visualmente lo que se narra en cada parte del guion.\n\n"
+            "Responde SOLO un JSON con: 'title', 'full_script', 'keywords', 'voice', 'description', 'tags'.\n"
+            f"En 'voice' usa: {voz}."
         )
         
         try:

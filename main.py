@@ -78,12 +78,13 @@ class VideoAutoPipeline:
             self.tts_engine.generate_audio(
                 text=script_data.get('full_script', ''),
                 output_path=audio_path,
-                voice='es-MX-DaliaNeural'
+                voice=script_data.get('voice', 'es-MX-DaliaNeural')
             )
             
             # 3. Descargar Media (Videos/Imágenes)
             logger.info("3/6 Buscando material visual...")
             duration = self.tts_engine.get_audio_duration(audio_path)
+            is_short = duration <= 60.0
             keywords = script_data.get('keywords', [topic])
             if isinstance(keywords, str): keywords = [k.strip() for k in keywords.split(',')]
             
@@ -92,7 +93,8 @@ class VideoAutoPipeline:
                 target_duration=max(int(duration), 120),
                 save_dir="assets/temp",
                 video_id=video_id,
-                prefer_video=True
+                prefer_video=True,
+                is_short=is_short
             )
             
             # 4. Editar Video

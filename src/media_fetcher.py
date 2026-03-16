@@ -41,50 +41,52 @@ class MediaFetcher:
         save_dir: str,
         video_id: str,
         prefer_video: bool = True,
+        is_short: bool = True
     ) -> list:
         """
-        Descarga toda la media necesaria para un video.
+        Descarga toda la media necesaria para un video, asegurando coherencia visual.
         """
         save_dir = Path(save_dir) / video_id
         save_dir.mkdir(parents=True, exist_ok=True)
 
         media_list = []
-        clips_needed = max(3, target_duration // 8)  # ~8s por clip
+        # Reducimos la duración por clip para que sea más dinámico (4-6s)
+        clips_needed = max(5, target_duration // 5) 
 
-        logger.info(f"Buscando {clips_needed} clips para {target_duration}s de video")
-        logger.info(f"Keywords: {', '.join(keywords)}")
+        logger.info(f"Buscando {clips_needed} clips para {target_duration}s de video ({'Short' if is_short else 'Largo'})")
+        logger.info(f"Keywords principales: {', '.join(keywords)}")
 
-        # Rotar entre keywords para variedad
+        # Rotar entre keywords para variedad, asegurando que cubran todo el guion
         kw_cycle = (keywords * ((clips_needed // len(keywords)) + 2))[:clips_needed]
 
         for i, kw in enumerate(kw_cycle):
             try:
                 media_item = None
+                orientation = "portrait" if is_short else "landscape"
 
-                # MEJORA: Priorizar Pollinations.ai para imágenes generadas por IA si se desea
-                # O mantener un balance. El usuario pidió usar Pollinations.ai.
-                # Vamos a intentar generar una imagen IA cada 2 clips para dar variedad visual única.
-                
+                # MEJORA: Alternar entre video real e imágenes IA para máxima calidad y coherencia
+                # Las imágenes IA (Pollinations) son excelentes para temas específicos que no hay en stock
                 if i % 2 == 0:
-                    media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:03d}")
+                    # Intentar video de stock primero para realismo
+                    if prefer_video and self.pexels_key:
+                        media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}", orientation)
+                    
+                    if not media_item and self.pixabay_key:
+                        media_item = self._fetch_pixabay_video(kw, save_dir, f"clip_{i:03d}")
                 
-                if not media_item and prefer_video and self.pexels_key:
-                    media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}")
-
-                if not media_item and self.pixabay_key:
-                    media_item = self._fetch_pixabay_video(kw, save_dir, f"clip_{i:03d}")
-
-                if not media_item and self.pexels_key:
-                    media_item = self._fetch_pexels_image(kw, save_dir, f"img_{i:03d}")
-
+                # Si no hay video o toca imagen IA
                 if not media_item:
-                    media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_fallback_{i:03d}")
+                    media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:03d}", is_short)
+
+                # Fallback final a imagen de stock
+                if not media_item and self.pexels_key:
+                    media_item = self._fetch_pexels_image(kw, save_dir, f"img_{i:03d}", orientation)
 
                 if media_item:
                     media_list.append(media_item)
                     logger.debug(f"  [{i+1}/{clips_needed}] ✓ {kw}: {media_item['path']}")
 
-                time.sleep(0.3)  # Rate limiting
+                time.sleep(0.2)  # Rate limiting ligero
 
             except Exception as e:
                 logger.warning(f"Error descargando media para '{kw}': {e}")
@@ -101,7 +103,7 @@ class MediaFetcher:
         return media_list
 
     # ─── Pexels Videos ───────────────────────────────────────
-    def _fetch_pexels_video(self, keyword: str, save_dir: Path, prefix: str) -> Optional[dict]:
+    def _fetch_pexels_video(self, keyword: str, save_dir: Path, prefix: str, orientation: str = "portrait") -> Optional[dict]:
         """Descarga un clip de video de Pexels."""
         if not self.pexels_key:
             return None
@@ -110,8 +112,8 @@ class MediaFetcher:
             url = f"{PEXELS_BASE}/videos/search"
             params = {
                 "query": keyword,
-                "per_page": 10,
-                "orientation": "portrait",  # Para Shorts
+                "per_page": 15,
+                "orientation": orientation,
                 "size": "medium",
             }
             headers = {"Authorization": self.pexels_key}
@@ -162,14 +164,14 @@ class MediaFetcher:
             return None
 
     # ─── Pexels Images ────────────────────────────────────────
-    def _fetch_pexels_image(self, keyword: str, save_dir: Path, prefix: str) -> Optional[dict]:
+    def _fetch_pexels_image(self, keyword: str, save_dir: Path, prefix: str, orientation: str = "portrait") -> Optional[dict]:
         """Descarga una imagen de Pexels."""
         if not self.pexels_key:
             return None
 
         try:
             url = f"{PEXELS_BASE}/v1/search"
-            params = {"query": keyword, "per_page": 10, "orientation": "portrait"}
+            params = {"query": keyword, "per_page": 10, "orientation": orientation}
             headers = {"Authorization": self.pexels_key}
 
             resp = self.session.get(url, params=params, headers=headers, timeout=15)
@@ -254,7 +256,7 @@ class MediaFetcher:
             return None
 
     # ─── Pollinations AI Images ───────────────────────────────
-    def _fetch_pollinations_image(self, keyword: str, save_dir: Path, prefix: str) -> Optional[dict]:
+    def _fetch_pollinations_image(self, keyword: str, save_dir: Path, prefix: str, is_short: bool = True) -> Optional[dict]:
         """
         Genera imagen IA con Pollinations.ai (totalmente gratis).
         """
@@ -262,8 +264,11 @@ class MediaFetcher:
             prompt = self._build_image_prompt(keyword)
             encoded = requests.utils.quote(prompt)
 
-            # Configurar para aspect ratio vertical (Shorts)
-            url = f"{POLLINATIONS}/{encoded}?width=1080&height=1920&seed={random.randint(1,999999)}&nologo=true"
+            # Configurar resolución según formato
+            width = 1080 if is_short else 1920
+            height = 1920 if is_short else 1080
+            
+            url = f"{POLLINATIONS}/{encoded}?width={width}&height={height}&seed={random.randint(1,999999)}&nologo=true"
 
             filename = save_dir / f"{prefix}_ai.jpg"
 
