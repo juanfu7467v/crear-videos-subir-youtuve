@@ -164,15 +164,23 @@ class VideoAutoPipeline:
             logger.warning(f"⚠️ Error durante la limpieza de residuos: {e}")
 
     def _keep_alive_task(self):
+        # Intentar obtener la URL pública de Fly.io
+        app_name = os.getenv("FLY_APP_NAME")
+        base_url = f"https://{app_name}.fly.dev" if app_name else "http://localhost:8080"
+        
+        logger.info(f"📡 Keep-alive usará la URL: {base_url}/keep-alive")
+        
         while self.keep_alive_running:
             try:
-                # Send a request to a dummy endpoint on the local server
-                # This simulates activity and prevents Fly.io from auto-stopping
-                requests.get("http://localhost:8080/keep-alive", timeout=5)
-                logger.debug("❤️ Keep-alive signal sent.")
+                # Realizar una petición externa real para que Fly.io detecte tráfico
+                # y no apague la máquina por "inactividad" durante el renderizado.
+                requests.get(f"{base_url}/keep-alive", timeout=10)
+                logger.debug("❤️ Keep-alive signal sent to public endpoint.")
             except requests.exceptions.RequestException as e:
                 logger.warning(f"⚠️ Error sending keep-alive signal: {e}")
-            time.sleep(60) # Send signal every 60 seconds
+            
+            # Esperar 30 segundos entre señales para asegurar que Fly.io vea tráfico constante
+            time.sleep(30)
 
     def _start_keep_alive(self):
         self.keep_alive_running = True
