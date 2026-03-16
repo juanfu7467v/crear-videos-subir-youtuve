@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import threading
+import requests
 import time
 import shutil
 from pathlib import Path
@@ -34,6 +35,8 @@ class VideoAutoPipeline:
         self.quality_checker = QualityChecker(os.getenv("GEMINI_API_KEY", ""))
         self.yt_uploader     = YouTubeUploader()
         self.scheduler       = VideoScheduler()
+        self.keep_alive_thread = None
+        self.keep_alive_running = False
 
     def run_full_pipeline_with_data(self, trend_data: dict):
         """Pipeline que procesa los datos recibidos y genera el video."""
@@ -50,6 +53,8 @@ class VideoAutoPipeline:
             optimal_time = trend_data.get('hora_optima_publicacion')
 
             logger.info(f"═══ INICIANDO PRODUCCIÓN DE: {topic} ═══")
+            self._start_keep_alive()
+
             
             # 1. Generar Guion extendido usando la idea de contenido
             logger.info("1/6 Generando guion y metadatos...")
@@ -122,12 +127,16 @@ class VideoAutoPipeline:
             )
             
             logger.info(f"✅ Proceso completado con éxito!")
+            self._stop_keep_alive()
+
             logger.info(f"🔗 URL: {video_url}")
             logger.info(f"📅 Programado para: {publish_time}")
 
             # --- POLÍTICA DE RESIDUO CERO ---
             logger.info("🧹 Aplicando Política de Residuo Cero...")
             self._cleanup_assets(output_dir, temp_assets_dir)
+            self._stop_keep_alive()
+
 
         except Exception as e:
             logger.error(f"❌ Error crítico en pipeline: {e}")
@@ -135,6 +144,8 @@ class VideoAutoPipeline:
             logger.error(traceback.format_exc())
             # Intentar limpiar incluso si falla, para no dejar basura
             self._cleanup_assets(output_dir, temp_assets_dir)
+            self._stop_keep_alive()
+
 
     def _cleanup_assets(self, output_dir: Path, temp_assets_dir: Path):
         """Elimina archivos temporales generados durante el proceso."""
@@ -151,6 +162,30 @@ class VideoAutoPipeline:
                 
         except Exception as e:
             logger.warning(f"⚠️ Error durante la limpieza de residuos: {e}")
+
+    def _keep_alive_task(self):
+        while self.keep_alive_running:
+            try:
+                # Send a request to a dummy endpoint on the local server
+                # This simulates activity and prevents Fly.io from auto-stopping
+                requests.get("http://localhost:8080/keep-alive", timeout=5)
+                logger.debug("❤️ Keep-alive signal sent.")
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"⚠️ Error sending keep-alive signal: {e}")
+            time.sleep(60) # Send signal every 60 seconds
+
+    def _start_keep_alive(self):
+        self.keep_alive_running = True
+        self.keep_alive_thread = threading.Thread(target=self._keep_alive_task, daemon=True)
+        self.keep_alive_thread.start()
+        logger.info("✅ Keep-alive mechanism started.")
+
+    def _stop_keep_alive(self):
+        self.keep_alive_running = False
+        if self.keep_alive_thread and self.keep_alive_thread.is_alive():
+            self.keep_alive_thread.join(timeout=5) # Give it a moment to stop
+        logger.info("✅ Keep-alive mechanism stopped.")
+
 
 if __name__ == "__main__":
     from src.web_server import run_server

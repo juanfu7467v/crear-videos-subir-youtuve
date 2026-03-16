@@ -54,8 +54,10 @@ class PipelineHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"❌ Error procesando la solicitud: {e}")
                 self._respond(500, {"error": str(e)})
+        elif self.path == "/keep-alive":
+            self._respond(200, {"status": "alive"})
         else:
-            self._respond(404, {"error": "Ruta no encontrada. Use /trigger-video"})
+            self._respond(404, {"error": "Ruta no encontrada. Use /trigger-video o /keep-alive"})
 
     def _respond(self, status, data):
         body = json.dumps(data).encode("utf-8")
