@@ -43,35 +43,37 @@ class VideoEditor:
             item_type = item.get("type")
             item_path = item.get("path")
             
-            if item_type == "video":
-                clip = VideoFileClip(item_path, audio=False)
-            else:
-                clip = ImageClip(item_path)
-            
-            # Ajustar duración y tamaño
-            clip_duration = 5 if item_type == "image" else clip.duration
-            # Redimensionar y centrar/recortar en un solo paso para eficiencia
-            clip = clip.resize(height=target_h)
-            if clip.w > target_w:
-                x_center = clip.w / 2
-                clip = clip.crop(x1=x_center - target_w / 2, y1=0, x2=x_center + target_w / 2, y2=target_h)
-            elif clip.w < target_w:
-                # Si es más estrecho, lo centramos con márgenes negros
-                diff = target_w - clip.w
-                left = diff // 2
-                right = diff - left # Esto maneja automáticamente anchos impares
-                clip = clip.margin(left=left, right=right, color=(0,0,0))
-            
-            # Centrar y recortar si es más ancho que el objetivo
-
-            
-            clip = clip.set_duration(clip_duration).set_start(current_time)
-            clips.append(clip)
-            current_time += clip_duration
-            if current_time >= duration: break
+            try:
+                if item_type == "video":
+                    clip = VideoFileClip(item_path, audio=False)
+                else:
+                    clip = ImageClip(item_path)
+                
+                # Ajustar duración y tamaño
+                clip_duration = 5 if item_type == "image" else clip.duration
+                # Redimensionar y centrar/recortar en un solo paso para eficiencia
+                clip = clip.resize(height=target_h)
+                if clip.w > target_w:
+                    x_center = clip.w / 2
+                    clip = clip.crop(x1=x_center - target_w / 2, y1=0, x2=x_center + target_w / 2, y2=target_h)
+                elif clip.w < target_w:
+                    # Si es más estrecho, lo centramos con márgenes negros
+                    diff = target_w - clip.w
+                    left = diff // 2
+                    right = diff - left 
+                    clip = clip.margin(left=left, right=right, color=(0,0,0))
+                
+                clip = clip.set_duration(clip_duration).set_start(current_time)
+                clips.append(clip)
+                current_time += clip_duration
+                if current_time >= duration: break
+            except Exception as e:
+                logger.warning(f"Error procesando clip {item_path}: {e}")
+                continue
             
         # Concatenar y ajustar a la duración del audio
-        visual_base = concatenate_videoclips(clips, method="compose").set_duration(duration)
+        # method="chain" es más eficiente en memoria que "compose" para concatenaciones simples
+        visual_base = concatenate_videoclips(clips, method="chain").set_duration(duration)
         
         # 3. Añadir Música de Fondo Aleatoria
         final_audio = tts_audio
@@ -99,14 +101,34 @@ class VideoEditor:
         final_video = CompositeVideoClip([visual_base]).set_audio(final_audio)
         
         logger.info(f"Renderizando video final en {output_path}...")
-        # Usar un preset más rápido para libx264 sin sacrificar demasiada calidad
-        # 'medium' es un buen balance entre velocidad y calidad. 'fast' o 'veryfast' son más rápidos.
-        # También se puede ajustar el bitrate si se quiere controlar el tamaño del archivo, pero no se pidió.
-        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", logger=None, preset="medium", threads=1)
+        # threads=1 para procesamiento secuencial
+        # bitrate="2000k" para limitar el flujo de datos y RAM
+        # write_videofile puede consumir mucha RAM, por lo que cerramos clips después
+        final_video.write_videofile(
+            output_path, 
+            fps=24, 
+            codec="libx264", 
+            audio_codec="aac", 
+            logger=None, 
+            preset="ultrafast", 
+            threads=1,
+            ffmpeg_params=["-crf", "28", "-tune", "stillimage"]
+        )
         
-        # Limpieza
+        # Limpieza exhaustiva para liberar RAM
         final_video.close()
+        visual_base.close()
+        for c in clips:
+            try:
+                c.close()
+            except:
+                pass
+        
         tts_audio.close()
-        if 'bg_music' in locals(): bg_music.close()
+        if 'bg_music' in locals(): 
+            try:
+                bg_music.close()
+            except:
+                pass
         
         return output_path
