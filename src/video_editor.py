@@ -102,27 +102,42 @@ class VideoEditor:
         full_script = script_data.get('full_script', '')
         subtitles = []
         
-        # Lógica simple de sincronización: dividir el texto por puntos/comas y repartir el tiempo
-        sentences = [s.strip() for s in full_script.replace('\n', ' ').split('.') if s.strip()]
+        # Lógica de sincronización: dividir el texto en fragmentos manejables
+        import re
+        # Dividir por puntos, comas o saltos de línea
+        raw_sentences = re.split(r'[.,!?\n]', full_script)
+        sentences = []
+        for s in raw_sentences:
+            s = s.strip()
+            if not s: continue
+            # Si la frase es muy larga (más de 60 caracteres), la dividimos para no saturar ImageMagick
+            while len(s) > 60:
+                split_idx = s[:60].rfind(' ')
+                if split_idx == -1: split_idx = 60
+                sentences.append(s[:split_idx].strip())
+                s = s[split_idx:].strip()
+            if s: sentences.append(s)
+
         if sentences:
             time_per_sentence = duration / len(sentences)
             for i, sentence in enumerate(sentences):
-                # Crear clip de texto
-                # Nota: Requiere ImageMagick instalado en el sistema
                 try:
+                    # Ajustamos el tamaño de fuente para asegurar legibilidad sin exceder límites
+                    fs = 60 if is_short else 40
                     txt_clip = TextClip(
                         sentence, 
-                        fontsize=70 if is_short else 50, 
+                        fontsize=fs, 
                         color='white', 
                         font='Liberation-Sans-Bold',
                         stroke_color='black',
                         stroke_width=2,
                         method='caption',
-                        size=(target_w * 0.8, None)
+                        size=(target_w * 0.8, None),
+                        align='center'
                     ).set_start(i * time_per_sentence).set_duration(time_per_sentence).set_position(('center', target_h * 0.8))
                     subtitles.append(txt_clip)
                 except Exception as e:
-                    logger.warning(f"No se pudo crear subtítulo: {e}")
+                    logger.warning(f"No se pudo crear subtítulo para '{sentence[:20]}...': {e}")
 
         # 5. Componer Video Final con Subtítulos
         final_video = CompositeVideoClip([visual_base] + subtitles).set_audio(final_audio)
