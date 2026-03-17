@@ -84,8 +84,8 @@ class VideoEditor:
                 logger.info(f"Añadiendo música de fondo: {bg_music_path.name}")
                 bg_music = AudioFileClip(str(bg_music_path))
                 
-                # Ajustar volumen (muy bajo para no interferir con la voz principal)
-                bg_music = bg_music.volumex(0.08)
+                # Ajustar volumen (ligeramente aumentado para que se escuche mejor sin opacar la voz)
+                bg_music = bg_music.volumex(0.15)
                 if bg_music.duration < duration:
                     bg_music = afx.audio_loop(bg_music, duration=duration)
                 else:
@@ -123,18 +123,19 @@ class VideoEditor:
             for i, sentence in enumerate(sentences):
                 try:
                     # Ajustamos el tamaño de fuente para asegurar legibilidad sin exceder límites
-                    fs = 60 if is_short else 40
+                    # MEJORA: Tamaño de subtítulos aumentado al doble (120 para Shorts, 80 para largos)
+                    fs = 120 if is_short else 80
                     txt_clip = TextClip(
                         sentence, 
                         fontsize=fs, 
-                        color='white', 
+                        color='yellow', # Cambiado a amarillo para mayor contraste
                         font='Liberation-Sans-Bold',
                         stroke_color='black',
-                        stroke_width=2,
+                        stroke_width=4, # Aumentado el borde para mayor legibilidad
                         method='caption',
-                        size=(target_w * 0.8, None),
+                        size=(target_w * 0.9, None), # Aumentado el ancho del área de texto
                         align='center'
-                    ).set_start(i * time_per_sentence).set_duration(time_per_sentence).set_position(('center', target_h * 0.8))
+                    ).set_start(i * time_per_sentence).set_duration(time_per_sentence).set_position(('center', target_h * 0.75)) # Subido un poco para que no tape el borde inferior
                     subtitles.append(txt_clip)
                 except Exception as e:
                     logger.warning(f"No se pudo crear subtítulo para '{sentence[:20]}...': {e}")
