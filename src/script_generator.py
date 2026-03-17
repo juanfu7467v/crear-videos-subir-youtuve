@@ -59,9 +59,19 @@ class ScriptGenerator:
             text_response = data['candidates'][0]['content']['parts'][0]['text']
             
             raw = re.search(r'\{.*\}', text_response, re.DOTALL)
-            if raw:
-                return json.loads(raw.group(0))
-            return json.loads(text_response)
+            data = json.loads(raw.group(0)) if raw else json.loads(text_response)
+
+            # Corregir CHANNEL_NAME en el guion si es necesario
+            if 'full_script' in data:
+                real_name = "El Tío Jota"
+                if canal and "Criterio" in canal:
+                    real_name = "El Criterio"
+                
+                # Reemplazar CHANNEL_NAME, CHANNEL_NAME_2 y variaciones comunes
+                data['full_script'] = data['full_script'].replace("CHANNEL_NAME_2", real_name)
+                data['full_script'] = data['full_script'].replace("CHANNEL_NAME", real_name)
+            
+            return data
             
         except Exception as e:
             logger.error(f"Error crítico en la generación con Gemini: {e}")

@@ -110,7 +110,7 @@ class VideoAutoPipeline:
             
             # 5. Control de Calidad y Miniatura
             logger.info("5/6 Realizando control de calidad...")
-            qc_results = self.quality_checker.check_video(video_path)
+            qc_results = self.quality_checker.check_video(video_path, script_data=script_data)
             thumbnail_path = qc_results.get('thumbnail_path')
             
             # 6. Subir a YouTube

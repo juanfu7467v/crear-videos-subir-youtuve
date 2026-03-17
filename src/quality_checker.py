@@ -88,7 +88,7 @@ class QualityChecker:
             logger.debug(f"⚠️ Error analizando frame: {e}")
             return None
 
-    def check_video(self, video_path: str, expected_keywords: list = None, num_frames: int = 3) -> dict:
+    def check_video(self, video_path: str, expected_keywords: list = None, num_frames: int = 3, script_data: dict = None) -> dict:
         result = {
             "score": 75,
             "legibility": "media",
@@ -106,6 +106,10 @@ class QualityChecker:
             result.update({"score": 0, "approved": False, "issues": ["Video no encontrado"]})
             return result
 
+        # Determinar si es un video largo (más de 60 segundos)
+        duration = self._get_video_duration(video_path)
+        is_short = duration <= 60.0
+
         frames = self._extract_frames(video_path, num_frames)
         result["frames_analyzed"] = len(frames)
 
@@ -118,17 +122,78 @@ class QualityChecker:
             if frame_results:
                 result = self._aggregate_results(frame_results, result)
 
-        # Limpieza y thumbnail
-        if frames:
-            thumb = Path(video_path).with_suffix(".jpg")
-            try:
+        # Manejo de miniaturas
+        thumb = Path(video_path).with_suffix(".jpg")
+        
+        # MEJORA: Si es video largo, intentar generar miniatura con IA
+        if not is_short and self.api_key and script_data:
+            logger.info("Generando miniatura con IA para video largo...")
+            ai_thumb = self._generate_ai_thumbnail(script_data, str(thumb))
+            if ai_thumb:
+                result["thumbnail_path"] = ai_thumb
+            elif frames:
+                # Fallback a frame del video
                 import shutil
                 shutil.copy(frames[0], thumb)
                 result["thumbnail_path"] = str(thumb)
-            except: pass
+        elif frames:
+            # Para Shorts o si falla la IA, usar el primer frame extraído
+            import shutil
+            shutil.copy(frames[0], thumb)
+            result["thumbnail_path"] = str(thumb)
+
+        # Limpieza de frames temporales
+        if frames:
             for f in frames: Path(f).unlink(missing_ok=True)
 
         return result
+
+    def _generate_ai_thumbnail(self, script_data: dict, output_path: str) -> Optional[str]:
+        """
+        Genera una miniatura atractiva usando la API de Gemini Imagen.
+        Nota: Requiere que la API key tenga permisos para Imagen 3.
+        """
+        try:
+            topic = script_data.get('title', 'Curiosidades')
+            keywords = script_data.get('keywords', '')
+            if isinstance(keywords, list): keywords = ", ".join(keywords)
+
+            # Prompt optimizado para miniaturas virales
+            prompt = (
+                f"Create a high-quality, professional YouTube thumbnail for a video about: {topic}. "
+                f"Context: {keywords}. Style: Cinematic, ultra-realistic, vibrant colors, "
+                "high contrast, clickbait style but professional, generating curiosity and mystery. "
+                "No text, only a powerful visual image."
+            )
+
+            # URL para Imagen 3 en Gemini API
+            imagen_url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3:generateImages?key={self.api_key}"
+            
+            payload = {
+                "instances": [{"prompt": prompt}],
+                "parameters": {
+                    "sampleCount": 1,
+                    "aspectRatio": "16:9",
+                    "outputMimeType": "image/jpeg"
+                }
+            }
+
+            response = requests.post(imagen_url, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'predictions' in data and len(data['predictions']) > 0:
+                    img_b64 = data['predictions'][0]['bytesBase64Encoded']
+                    with open(output_path, "wb") as f:
+                        f.write(base64.b64decode(img_b64))
+                    logger.info(f"Miniatura IA generada exitosamente: {output_path}")
+                    return output_path
+            
+            logger.warning(f"No se pudo generar miniatura con IA (Status: {response.status_code}). Usando frame del video.")
+            return None
+        except Exception as e:
+            logger.error(f"Error generando miniatura con IA: {e}")
+            return None
 
     def _extract_frames(self, video_path: str, num_frames: int = 3) -> list:
         frames = []
