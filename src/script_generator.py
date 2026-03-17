@@ -20,32 +20,35 @@ class ScriptGenerator:
         canal = trend_data.get('canal', 'El Tío Jota')
         categoria = trend_data.get('categoria', 'general').lower()
         
-        # Definir estilo según el canal y categoría
+        # Definir estilo base según el canal y categoría
         if "Criterio" in canal or "películas" in categoria:
-            estilo = "serio, analítico, profesional y directo. Enfocado en la verdad y el análisis crítico."
+            estilo_base = "serio, analítico, profesional y directo. Enfocado en la verdad y el análisis crítico."
             voz = "es-MX-JorgeNeural" # Voz masculina más seria
         else:
-            estilo = "entusiasta, curioso, cercano y muy dinámico. Enfocado en sorprender al espectador con datos increíbles."
+            estilo_base = "entusiasta, curioso, cercano y muy dinámico. Enfocado en sorprender al espectador con datos increíbles."
             voz = "es-MX-DaliaNeural" # Voz femenina carismática
 
-        # MEJORA: Prompt ultra-detallado para coherencia, SEO y viralidad
+        # MEJORA: Prompt ultra-detallado para experto en YouTube
         prompt = (
-            f"Actúa como un experto guionista y estratega de YouTube. Crea un guion para el canal '{canal}'.\n"
-            f"Tema: {topic}\n"
-            f"Categoría: {categoria}\n"
-            f"Estilo: {estilo}\n\n"
-            "REQUISITOS DEL CONTENIDO:\n"
-            "1. IDIOMA: Todo el contenido DEBE estar en ESPAÑOL CLARO, NATURAL Y FÁCIL DE ENTENDER. Evita tecnicismos innecesarios o frases complejas.\n"
-            "2. TÍTULO: Debe ser irresistible, llamativo, creativo y divertido. Diseñado para captar la atención desde el inicio (Clickbait honesto).\n"
-            "3. DESCRIPCIÓN: Atractiva, incluye un resumen que genere curiosidad, usa emojis de forma profesional y llamados a la acción.\n"
-            "4. HOOK (0-3s): Empieza con una pregunta o dato impactante que obligue a seguir viendo.\n"
-            "5. DESARROLLO: Narración fluida, sin rellenos, manteniendo la tensión o el interés. Usa frases cortas y directas para una mejor dicción del narrador.\n"
-            "6. CIERRE: Un llamado a la acción rápido integrado en la narrativa.\n"
-            "7. LIMPIEZA: No uses símbolos como (*, _, -, #) dentro del 'full_script'. No incluyas acotaciones de escena ni nombres de personajes antes de sus diálogos.\n"
-            "8. COHERENCIA VISUAL: El campo 'keywords' debe contener 8-10 términos descriptivos en inglés "
-            "separados por comas que representen visualmente lo que se narra. Si es de películas, incluye nombres de personajes o escenas clave.\n\n"
-            "Responde SOLO un JSON con: 'title', 'full_script', 'keywords', 'voice', 'description', 'tags'.\n"
-            f"En 'voice' usa: {voz}."
+            f"Actúa como un experto creador de contenido para YouTube y estratega de viralidad. "
+            f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo.\n\n"
+            f"TEMA: {topic}\n"
+            f"CATEGORÍA: {categoria}\n"
+            f"ESTILO REQUERIDO: Intrintrante, entretenido y dinámico. {estilo_base}\n\n"
+            "ESTRUCTURA OBLIGATORIA DEL CONTENIDO:\n"
+            "1. INICIO IMPACTANTE (HOOK): Una frase poderosa en los primeros 5 segundos que genere una curiosidad irresistible o rompa un patrón.\n"
+            "2. DESARROLLO INTERESANTE: Explicación clara con datos sorprendentes, ritmo ágil y sin rellenos. Usa frases cortas para mantener el dinamismo.\n"
+            "3. GIRO O MOMENTO LLAMATIVO: Introduce algo inesperado, un dato poco conocido o un cambio de ritmo que mantenga la atención alta a mitad del video.\n"
+            "4. CONCLUSIÓN PODEROSA: Un mensaje final claro, una reflexión impactante o un resumen que deje al espectador satisfecho.\n"
+            "5. LLAMADA A LA ACCIÓN (CTA): Invita de forma creativa a suscribirse o ver más contenido, integrada naturalmente en el cierre.\n\n"
+            "REQUISITOS TÉCNICOS:\n"
+            "- IDIOMA: Español natural, claro y directo.\n"
+            "- LIMPIEZA: No uses símbolos como (*, _, -, #) en el 'full_script'. Sin acotaciones de escena.\n"
+            "- KEYWORDS: 8-10 términos descriptivos en inglés para búsqueda de material visual.\n"
+            "- CAMPOS ADICIONALES: Debes incluir 'prompt_ia', 'estilo_contenido', 'hook' y 'estructura' en el JSON.\n\n"
+            "Responde ÚNICAMENTE con un objeto JSON que contenga las siguientes llaves:\n"
+            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura'.\n"
+            f"En 'voice' usa siempre: {voz}."
         )
         
         try:
@@ -72,7 +75,6 @@ class ScriptGenerator:
                 if canal and "Criterio" in canal:
                     real_name = "El Criterio"
                 
-                # Reemplazar CHANNEL_NAME, CHANNEL_NAME_2 y variaciones comunes
                 data['full_script'] = data['full_script'].replace("CHANNEL_NAME_2", real_name)
                 data['full_script'] = data['full_script'].replace("CHANNEL_NAME", real_name)
             
@@ -87,8 +89,12 @@ class ScriptGenerator:
         return {
             "title": "Misterios Increíbles", 
             "full_script": "¡Detente! ¿Sabías que lo que estás a punto de ver cambiará tu forma de pensar? Bienvenidos a El Tío Jota, hoy exploramos un tema fascinante.", 
-            "voice": "random", 
+            "voice": "es-MX-DaliaNeural", 
             "keywords": "misterio, viral, curiosidades", 
             "description": "Explorando misterios con El Tío Jota.", 
-            "tags": "misterio, viral, curiosidades, shorts"
+            "tags": "misterio, viral, curiosidades, shorts",
+            "prompt_ia": "Generar un guion intrigante sobre misterios.",
+            "estilo_contenido": "Intrigante",
+            "hook": "¡Detente! ¿Sabías que lo que estás a punto de ver cambiará tu forma de pensar?",
+            "estructura": "Hook -> Desarrollo -> Cierre"
         }

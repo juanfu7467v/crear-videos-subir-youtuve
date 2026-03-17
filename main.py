@@ -58,7 +58,7 @@ class VideoAutoPipeline:
 
             
             # 1. Generar Guion extendido usando la idea de contenido
-            logger.info("1/6 Generando guion y metadatos...")
+            logger.info("1/6 Generando guion y metadatos con prompt optimizado...")
             # Enriquecemos el trend_data para el generador de guiones
             input_data = {
                 "topic": topic,
@@ -68,6 +68,11 @@ class VideoAutoPipeline:
                 "categoria": categoria
             }
             script_data = self.script_gen.generate_full_script(input_data)
+            
+            # Log de las mejoras implementadas
+            logger.info(f"✨ Estilo de contenido: {script_data.get('estilo_contenido', 'N/A')}")
+            logger.info(f"🪝 Hook generado: {script_data.get('hook', 'N/A')[:50]}...")
+            logger.info(f"🏗️ Estructura: {script_data.get('estructura', 'N/A')}")
             
             # Usar el título sugerido si el generador no dio uno mejor
             video_title = script_data.get('title') or title_suggested or topic
