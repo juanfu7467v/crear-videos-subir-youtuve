@@ -5,14 +5,19 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     TZ=America/Mexico_City
 
+# Instalar dependencias del sistema incluyendo ImageMagick para los subtítulos
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     fonts-liberation \
     ca-certificates \
     wget \
     tzdata \
+    imagemagick \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Configurar ImageMagick para permitir la creación de TextClips en MoviePy
+RUN sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
 
 WORKDIR /app
 
@@ -20,22 +25,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Crear directorios necesarios
 RUN mkdir -p assets/music assets/fonts output logs temp/audio temp/video temp/images credentials src
 
 COPY . .
 
 EXPOSE 8080
 
-# Script para activar swap si es necesario y arrancar la app
-RUN echo '#!/bin/bash\n\
-# Crear un archivo swap de 512MB si no existe\n\
-if [ ! -f /swapfile ]; then\n\
-    fallocate -l 512M /swapfile\n\
-    chmod 600 /swapfile\n\
-    mkswap /swapfile\n\
-fi\n\
-# Intentar activar swap (puede fallar en algunos entornos de contenedores, pero Fly.io lo permite en ciertas configs)\n\
-swapon /swapfile || true\n\
-exec python main.py' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
-
-CMD ["/app/entrypoint.sh"]
+# El comando de arranque directo, sin intentar swapon
+CMD ["python", "main.py"]

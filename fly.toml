@@ -12,7 +12,6 @@ primary_region = 'iad'
   min_machines_running = 0
   processes = ['app']
 
-# ESTA ES LA CORRECCIÓN CRUCIAL
 [processes]
   app = "python main.py"
 
