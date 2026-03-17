@@ -8,7 +8,8 @@ primary_region = 'iad'
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
-  auto_stop_timeout = 7200
+  # Mantiene la máquina encendida por 2 horas tras inactividad
+  auto_stop_timeout = 7200 
   min_machines_running = 0
   processes = ['app']
 
@@ -18,4 +19,5 @@ primary_region = 'iad'
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 2048
+  # Memoria actualizada a 6 GB (1024 * 6)
+  memory_mb = 6144 
