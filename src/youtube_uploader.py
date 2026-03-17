@@ -64,10 +64,28 @@ class YouTubeUploader:
             return "https://youtu.be/SIMULADO"
 
         try:
+            # MEJORA: Configuración avanzada de subida
+            is_kids = kwargs.get('is_kids', False)
+            tags = kwargs.get('tags', [])
+            category_id = kwargs.get('category_id', '22') # 22: People & Blogs, 1: Film & Animation
+            
             body = {
-                "snippet": {"title": title[:100], "description": description, "categoryId": "22"},
-                "status": {"privacyStatus": "public"}
+                "snippet": {
+                    "title": title[:100], 
+                    "description": description, 
+                    "categoryId": category_id,
+                    "tags": tags,
+                    "defaultLanguage": "es",
+                    "defaultAudioLanguage": "es"
+                },
+                "status": {
+                    "privacyStatus": "public",
+                    "selfDeclaredMadeForKids": is_kids,
+                    "embeddable": True,
+                    "license": "youtube"
+                }
             }
+            
             media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True)
             request = self.youtube.videos().insert(part="snippet,status", body=body, media_body=media)
             
@@ -75,7 +93,21 @@ class YouTubeUploader:
             while response is None:
                 _, response = request.next_chunk()
             
-            return f"https://youtu.be/{response.get('id')}"
+            video_id = response.get('id')
+            
+            # Subir miniatura si existe
+            thumbnail_path = kwargs.get('thumbnail_path')
+            if video_id and thumbnail_path and os.path.exists(thumbnail_path):
+                try:
+                    self.youtube.thumbnails().set(
+                        videoId=video_id,
+                        media_body=MediaFileUpload(thumbnail_path)
+                    ).execute()
+                    logger.info("Miniatura subida correctamente.")
+                except Exception as e:
+                    logger.warning(f"No se pudo subir la miniatura: {e}")
+
+            return f"https://youtu.be/{video_id}"
         except Exception as e:
             logger.error(f"Error real subiendo a YouTube: {e}")
             return "https://youtu.be/SIMULADO"

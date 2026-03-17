@@ -309,6 +309,67 @@ class MediaFetcher:
         style = random.choice(styles)
         return f"{keyword}, {style}, vertical format, high quality, no text, no watermark"
 
+    def _fetch_yarn_clip(self, keyword: str, save_dir: Path, prefix: str) -> Optional[dict]:
+        """Extrae un fragmento de video de GetYarn.io."""
+        try:
+            # GetYarn no tiene API oficial pública pero podemos buscar via web
+            search_url = f"https://getyarn.io/yarn-find?text={requests.utils.quote(keyword)}"
+            resp = self.session.get(search_url, timeout=10)
+            if resp.status_code != 200: return None
+            
+            # Buscar el primer clip ID en el HTML
+            import re
+            match = re.search(r'/yarn-clip/([a-f0-9\-]+)', resp.text)
+            if not match: return None
+            
+            clip_id = match.group(1)
+            video_url = f"https://y.yarn.co/{clip_id}.mp4"
+            filename = save_dir / f"{prefix}_yarn.mp4"
+            
+            self._download_file(video_url, str(filename))
+            
+            return {
+                "path": str(filename),
+                "type": "video",
+                "duration": 5, # Duración estimada
+                "keyword": keyword,
+                "source": "getyarn"
+            }
+        except Exception as e:
+            logger.debug(f"GetYarn error para '{keyword}': {e}")
+            return None
+
+    def _fetch_tmdb_thumbnail(self, movie_title: str, save_path: str) -> Optional[str]:
+        """Obtiene una miniatura de película desde TMDB."""
+        tmdb_key = os.getenv("TMDB_API_KEY")
+        if not tmdb_key:
+            logger.warning("TMDB_API_KEY no configurada. Saltando miniatura de TMDB.")
+            return None
+            
+        try:
+            # 1. Buscar película
+            search_url = f"https://api.themoviedb.org/3/search/movie"
+            params = {"api_key": tmdb_key, "query": movie_title, "language": "es-ES"}
+            resp = self.session.get(search_url, params=params, timeout=10)
+            resp.raise_for_status()
+            
+            results = resp.json().get("results", [])
+            if not results: return None
+            
+            # 2. Obtener el backdrop_path del primer resultado
+            backdrop_path = results[0].get("backdrop_path")
+            if not backdrop_path: return None
+            
+            # 3. Descargar imagen
+            img_url = f"https://image.tmdb.org/t/p/w1280{backdrop_path}"
+            self._download_file(img_url, save_path)
+            
+            logger.info(f"Miniatura de TMDB descargada para '{movie_title}': {save_path}")
+            return save_path
+        except Exception as e:
+            logger.error(f"Error en TMDB para '{movie_title}': {e}")
+            return None
+
     # ─── Descarga genérica ────────────────────────────────────
     def _download_file(self, url: str, save_path: str, max_size_mb: int = 50):
         """Descarga un archivo con límite de tamaño."""
@@ -336,10 +397,17 @@ class MediaFetcher:
         title: str,
         save_path: str,
         style: str = "youtube_thumbnail",
+        categoria: str = "general"
     ) -> Optional[str]:
         """
-        Genera una miniatura para YouTube usando Pollinations.ai.
+        Genera una miniatura para YouTube usando TMDB (si es películas) o Pollinations.ai.
         """
+        # MEJORA: Si es categoría películas, usar TMDB
+        if "películas" in categoria.lower():
+            tmdb_thumb = self._fetch_tmdb_thumbnail(topic, save_path)
+            if tmdb_thumb: return tmdb_thumb
+
+        # Fallback a Pollinations AI
         prompt = (
             f"YouTube thumbnail for a video about {topic}, {style}, "
             f"bold colors, eye-catching, professional, "

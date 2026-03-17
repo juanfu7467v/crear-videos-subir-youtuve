@@ -51,8 +51,9 @@ class VideoAutoPipeline:
             content_idea = trend_data.get('idea_contenido')
             format_suggested = trend_data.get('formato_sugerido', 'Short')
             optimal_time = trend_data.get('hora_optima_publicacion')
+            categoria = trend_data.get('categoria', 'general')
 
-            logger.info(f"═══ INICIANDO PRODUCCIÓN DE: {topic} ═══")
+            logger.info(f"═══ INICIANDO PRODUCCIÓN DE: {topic} ({categoria}) ═══")
             self._start_keep_alive()
 
             
@@ -63,7 +64,8 @@ class VideoAutoPipeline:
                 "topic": topic,
                 "suggested_title": title_suggested,
                 "content_idea": content_idea,
-                "canal": trend_data.get('canal', 'CHANNEL_NAME')
+                "canal": trend_data.get('canal', 'CHANNEL_NAME'),
+                "categoria": categoria
             }
             script_data = self.script_gen.generate_full_script(input_data)
             
@@ -94,7 +96,8 @@ class VideoAutoPipeline:
                 save_dir="assets/temp",
                 video_id=video_id,
                 prefer_video=True,
-                is_short=is_short
+                is_short=is_short,
+                categoria=categoria
             )
             
             # 4. Editar Video
@@ -109,14 +112,24 @@ class VideoAutoPipeline:
             )
             
             # 5. Control de Calidad y Miniatura
-            logger.info("5/6 Realizando control de calidad...")
+            logger.info("5/6 Realizando control de calidad y miniatura...")
             qc_results = self.quality_checker.check_video(video_path, script_data=script_data)
             thumbnail_path = qc_results.get('thumbnail_path')
             
+            # MEJORA: Si es películas, intentar miniatura de TMDB primero
+            if "películas" in categoria.lower():
+                tmdb_thumb = str(output_dir / "tmdb_thumb.jpg")
+                if self.media_fetcher.generate_thumbnail(topic, video_title, tmdb_thumb, categoria=categoria):
+                    thumbnail_path = tmdb_thumb
+
             # 6. Subir a YouTube
             logger.info("6/6 Programando subida a YouTube...")
             publish_time = self.scheduler.calculate_publish_time(preferred_time=optimal_time)
             
+            # Configuración SEO y Categoría YouTube
+            yt_category = "1" if "películas" in categoria.lower() else "22"
+            is_kids = "niños" in categoria.lower() or "infantil" in categoria.lower()
+
             video_url = self.yt_uploader.upload(
                 video_path=video_path,
                 title=video_title,
@@ -125,7 +138,9 @@ class VideoAutoPipeline:
                 channel_name=trend_data.get('canal', 'CHANNEL_NAME'),
                 is_short=("short" in format_suggested.lower()),
                 publish_at=publish_time,
-                thumbnail_path=thumbnail_path
+                thumbnail_path=thumbnail_path,
+                category_id=yt_category,
+                is_kids=is_kids
             )
             
             logger.info(f"✅ Proceso completado con éxito!")

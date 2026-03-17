@@ -16,29 +16,33 @@ class ScriptGenerator:
         )
 
     def generate_full_script(self, trend_data: dict) -> dict:
-        topic = trend_data.get('topic', 'curiosidades')
+        topic = trend_data.get('tema_recomendado') or trend_data.get('topic', 'curiosidades')
         canal = trend_data.get('canal', 'El Tío Jota')
+        categoria = trend_data.get('categoria', 'general').lower()
         
-        # Definir estilo según el canal
-        if "Criterio" in canal:
+        # Definir estilo según el canal y categoría
+        if "Criterio" in canal or "películas" in categoria:
             estilo = "serio, analítico, profesional y directo. Enfocado en la verdad y el análisis crítico."
             voz = "es-MX-JorgeNeural" # Voz masculina más seria
         else:
             estilo = "entusiasta, curioso, cercano y muy dinámico. Enfocado en sorprender al espectador con datos increíbles."
             voz = "es-MX-DaliaNeural" # Voz femenina carismática
 
-        # MEJORA: Prompt ultra-detallado para coherencia y profesionalismo
+        # MEJORA: Prompt ultra-detallado para coherencia, SEO y viralidad
         prompt = (
-            f"Actúa como un experto guionista de YouTube. Crea un guion para el canal '{canal}'.\n"
+            f"Actúa como un experto guionista y estratega de YouTube. Crea un guion para el canal '{canal}'.\n"
             f"Tema: {topic}\n"
-            f"Estilo del canal: {estilo}\n\n"
-            "REQUISITOS DEL GUION:\n"
-            "1. HOOK (0-3s): Empieza con una pregunta o dato impactante que obligue a seguir viendo.\n"
-            "2. DESARROLLO: Narración fluida, sin rellenos, manteniendo la tensión o el interés.\n"
-            "3. CIERRE: Un llamado a la acción rápido (suscríbete, comenta) integrado en la narrativa.\n"
-            "4. LIMPIEZA: No uses símbolos como (*, _, -, #) dentro del 'full_script'.\n"
-            "5. COHERENCIA VISUAL: El campo 'keywords' debe contener 8-10 términos descriptivos en inglés "
-            "separados por comas que representen visualmente lo que se narra en cada parte del guion.\n\n"
+            f"Categoría: {categoria}\n"
+            f"Estilo: {estilo}\n\n"
+            "REQUISITOS DEL CONTENIDO:\n"
+            "1. TÍTULO: Debe ser irresistible, llamativo, creativo y divertido. Diseñado para captar la atención desde el inicio (Clickbait honesto).\n"
+            "2. DESCRIPCIÓN: Atractiva, incluye un resumen que genere curiosidad, usa emojis de forma profesional y llamados a la acción.\n"
+            "3. HOOK (0-3s): Empieza con una pregunta o dato impactante que obligue a seguir viendo.\n"
+            "4. DESARROLLO: Narración fluida, sin rellenos, manteniendo la tensión o el interés.\n"
+            "5. CIERRE: Un llamado a la acción rápido integrado en la narrativa.\n"
+            "6. LIMPIEZA: No uses símbolos como (*, _, -, #) dentro del 'full_script'.\n"
+            "7. COHERENCIA VISUAL: El campo 'keywords' debe contener 8-10 términos descriptivos en inglés "
+            "separados por comas que representen visualmente lo que se narra. Si es de películas, incluye nombres de personajes o escenas clave.\n\n"
             "Responde SOLO un JSON con: 'title', 'full_script', 'keywords', 'voice', 'description', 'tags'.\n"
             f"En 'voice' usa: {voz}."
         )

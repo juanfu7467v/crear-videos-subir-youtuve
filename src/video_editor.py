@@ -10,7 +10,7 @@ Image.ANTIALIAS = Image.Resampling.LANCZOS
 
 from moviepy.editor import (
     VideoFileClip, ImageClip, AudioFileClip, concatenate_videoclips, 
-    CompositeVideoClip, afx
+    CompositeVideoClip, TextClip, afx
 )
 
 logger = logging.getLogger(__name__)
@@ -97,8 +97,35 @@ class VideoEditor:
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
-        # 4. Componer Video Final (Sin subtítulos)
-        final_video = CompositeVideoClip([visual_base]).set_audio(final_audio)
+        # 4. Añadir Subtítulos Automáticos (MEJORA)
+        # Dividimos el guion en frases cortas para los subtítulos
+        full_script = script_data.get('full_script', '')
+        subtitles = []
+        
+        # Lógica simple de sincronización: dividir el texto por puntos/comas y repartir el tiempo
+        sentences = [s.strip() for s in full_script.replace('\n', ' ').split('.') if s.strip()]
+        if sentences:
+            time_per_sentence = duration / len(sentences)
+            for i, sentence in enumerate(sentences):
+                # Crear clip de texto
+                # Nota: Requiere ImageMagick instalado en el sistema
+                try:
+                    txt_clip = TextClip(
+                        sentence, 
+                        fontsize=70 if is_short else 50, 
+                        color='white', 
+                        font='Arial-Bold',
+                        stroke_color='black',
+                        stroke_width=2,
+                        method='caption',
+                        size=(target_w * 0.8, None)
+                    ).set_start(i * time_per_sentence).set_duration(time_per_sentence).set_position(('center', target_h * 0.8))
+                    subtitles.append(txt_clip)
+                except Exception as e:
+                    logger.warning(f"No se pudo crear subtítulo: {e}")
+
+        # 5. Componer Video Final con Subtítulos
+        final_video = CompositeVideoClip([visual_base] + subtitles).set_audio(final_audio)
         
         logger.info(f"Renderizando video final en {output_path}...")
         # threads=1 para procesamiento secuencial
