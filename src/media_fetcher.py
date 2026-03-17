@@ -41,7 +41,8 @@ class MediaFetcher:
         save_dir: str,
         video_id: str,
         prefer_video: bool = True,
-        is_short: bool = True
+        is_short: bool = True,
+        categoria: Optional[str] = None
     ) -> list:
         """
         Descarga toda la media necesaria para un video, asegurando coherencia visual.
