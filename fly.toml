@@ -17,7 +17,7 @@ primary_region = 'iad'
   app = "python main.py"
 
 [[vm]]
+  # Configuración basada en tu panel de Fly.io (shared-cpu-6x y 8GB)
   cpu_kind = 'shared'
-  cpus = 1
-  # Memoria actualizada a 6 GB (1024 * 6)
-  memory_mb = 6144 
+  cpus = 6
+  memory_mb = 8192
