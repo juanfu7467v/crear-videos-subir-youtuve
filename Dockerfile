@@ -9,15 +9,19 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     fonts-liberation \
+    fontconfig \
     ca-certificates \
     wget \
     tzdata \
     imagemagick \
+    && fc-cache -fv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Configurar ImageMagick para permitir la creación de TextClips en MoviePy
-RUN sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml
+# Se habilitan los permisos de lectura/escritura y se comentan políticas restrictivas de PDF/Coder si existieran
+RUN sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="path" rights="read|write" pattern="@\*"/g' /etc/ImageMagick-6/policy.xml && \
+    sed -i '/<policy domain="coder" rights="none" pattern="PDF" \/>/d' /etc/ImageMagick-6/policy.xml
 
 WORKDIR /app
 

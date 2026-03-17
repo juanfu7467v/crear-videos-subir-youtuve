@@ -114,7 +114,7 @@ class VideoEditor:
                         sentence, 
                         fontsize=70 if is_short else 50, 
                         color='white', 
-                        font='Arial-Bold',
+                        font='Liberation-Sans-Bold',
                         stroke_color='black',
                         stroke_width=2,
                         method='caption',
