@@ -38,7 +38,7 @@ class MediaFetcher:
     # ─── Entry point principal ────────────────────────────────
     def fetch_media_for_video(
         self,
-        keywords: list,
+        segmented_script: list,
         target_duration: int,
         save_dir: str,
         video_id: str,
@@ -53,34 +53,35 @@ class MediaFetcher:
         save_dir.mkdir(parents=True, exist_ok=True)
 
         media_list = []
-        # Reducimos la duración por clip para que sea más dinámico (4-6s)
-        clips_needed = max(5, target_duration // 5) 
+        total_clips_needed = len(segmented_script)
 
-        logger.info(f"Buscando {clips_needed} clips para {target_duration}s de video ({'Short' if is_short else 'Largo'})")
+        logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({\'Short\' if is_short else \'Largo\'}) basado en el script segmentado.")
         
-        # MEJORA: Si es categoría películas, intentar obtener clips reales primero
-        if categoria and "películas" in categoria.lower():
-            movie_title = keywords[0] if keywords else video_id
-            movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, clips_needed // 2)
-            if movie_clips:
-                media_list.extend(movie_clips)
-                logger.info(f"✓ Se obtuvieron {len(movie_clips)} clips reales de la película.")
-                # Ajustar clips_needed para el resto del material
-                clips_needed = max(0, clips_needed - len(movie_clips))
+        for i, segment in enumerate(segmented_script):
+            segment_keywords = segment.get("keywords", "").split(", ")
+            segment_duration = segment.get("estimated_duration", 5) # Duración por defecto si no se especifica
+            segment_text = segment.get("segment_text", "")
 
-        logger.info(f"Keywords principales: {', '.join(keywords)}")
+            if not segment_keywords or segment_keywords == ['']:
+                logger.warning(f"Segmento {i+1} sin palabras clave. Saltando.")
+                continue
+            
+            kw = random.choice(segment_keywords) # Tomar una palabra clave aleatoria del segmento
+            logger.info(f"Buscando media para segmento {i+1} (duración {segment_duration}s) con palabra clave: {kw}")
 
-        # Rotar entre keywords para variedad, asegurando que cubran todo el guion
-        kw_cycle = (keywords * ((clips_needed // len(keywords)) + 2))[:clips_needed]
-
-        for i, kw in enumerate(kw_cycle):
             try:
                 media_item = None
                 orientation = "portrait" if is_short else "landscape"
 
-                # MEJORA: Alternar entre video real e imágenes IA para máxima calidad y coherencia
-                # Las imágenes IA (Pollinations) son excelentes para temas específicos que no hay en stock
-                if i % 2 == 0:
+                # Priorizar clips de película si la categoría es de películas
+                if categoria and "películas" in categoria.lower():
+                    movie_title = segment_text.split(" ")[0] if segment_text else video_id # Usar la primera palabra del segmento como título tentativo
+                    movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, 1) # Solo 1 clip por segmento
+                    if movie_clips:
+                        media_item = movie_clips[0]
+                        logger.info(f"✓ Se obtuvo clip real de película para segmento {i+1}.")
+
+                if not media_item:
                     # Intentar video de stock primero para realismo
                     if prefer_video and self.pexels_key:
                         media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}", orientation)
@@ -97,20 +98,23 @@ class MediaFetcher:
                     media_item = self._fetch_pexels_image(kw, save_dir, f"img_{i:03d}", orientation)
 
                 if media_item:
+                    media_item["segment_duration"] = segment_duration # Guardar la duración estimada del segmento
                     media_list.append(media_item)
-                    logger.debug(f"  [{i+1}/{clips_needed}] ✓ {kw}: {media_item['path']}")
+                    logger.debug(f"  [{i+1}/{total_clips_needed}] ✓ {kw}: {media_item[\'path\']}")
 
                 time.sleep(0.2)  # Rate limiting ligero
 
             except Exception as e:
-                logger.warning(f"Error descargando media para '{kw}': {e}")
+                logger.warning(f"Error descargando media para \'{kw}\' en segmento {i+1}: {e}")
                 continue
 
         if not media_list:
-            logger.warning("No se pudo descargar ningún media. Generando imágenes AI...")
-            for i, kw in enumerate(keywords[:5]):
-                item = self._fetch_pollinations_image(kw, save_dir, f"fallback_{i}")
+            logger.warning("No se pudo descargar ningún media. Generando imágenes AI de fallback...")
+            for i, segment in enumerate(segmented_script[:5]):
+                kw_fallback = random.choice(segment.get("keywords", "fallback").split(", "))
+                item = self._fetch_pollinations_image(kw_fallback, save_dir, f"fallback_{i}", is_short)
                 if item:
+                    item["segment_duration"] = segment.get("estimated_duration", 5)
                     media_list.append(item)
 
         logger.info(f"Media total descargada: {len(media_list)} elementos")

@@ -96,7 +96,7 @@ class VideoAutoPipeline:
             if isinstance(keywords, str): keywords = [k.strip() for k in keywords.split(',')]
             
             media_list = self.media_fetcher.fetch_media_for_video(
-                keywords=keywords,
+                segmented_script=script_data.get("segmented_script", []),
                 target_duration=max(int(duration), 120),
                 save_dir="assets/temp",
                 video_id=video_id,

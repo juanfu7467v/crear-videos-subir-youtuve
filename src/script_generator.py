@@ -47,8 +47,10 @@ class ScriptGenerator:
             "- KEYWORDS: 8-10 términos descriptivos en inglés para búsqueda de material visual.\n"
             "- CAMPOS ADICIONALES: Debes incluir 'prompt_ia', 'estilo_contenido', 'hook' y 'estructura' en el JSON.\n\n"
             "Responde ÚNICAMENTE con un objeto JSON que contenga las siguientes llaves:\n"
-            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura'.\n"
-            f"En 'voice' usa siempre: {voz}."
+            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script'.\n"
+            f"En 'voice' usa siempre: {voz}.\n\n"
+            "Para cada segmento del 'full_script', proporciona un 'segment_text', 'keywords' (3-5 términos en inglés) y 'estimated_duration' (en segundos, basándose en la longitud del texto y un ritmo de habla normal de 150 palabras por minuto). La suma de 'estimated_duration' debe ser aproximadamente la duración total del guion.\n\n"
+            "'segmented_script' debe ser una lista de objetos, cada uno con 'segment_text', 'keywords' y 'estimated_duration'."
         )
         
         try:
@@ -96,5 +98,9 @@ class ScriptGenerator:
             "prompt_ia": "Generar un guion intrigante sobre misterios.",
             "estilo_contenido": "Intrigante",
             "hook": "¡Detente! ¿Sabías que lo que estás a punto de ver cambiará tu forma de pensar?",
-            "estructura": "Hook -> Desarrollo -> Cierre"
+            "estructura": "Hook -> Desarrollo -> Cierre",
+            "segmented_script": [
+                {"segment_text": "¡Detente! ¿Sabías que lo que estás a punto de ver cambiará tu forma de pensar?", "keywords": "stop, mind-blowing, shocking facts", "estimated_duration": 5},
+                {"segment_text": "Bienvenidos a El Tío Jota, hoy exploramos un tema fascinante.", "keywords": "welcome, fascinating topic, El Tío Jota", "estimated_duration": 4}
+            ]
         }
