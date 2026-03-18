@@ -44,14 +44,23 @@ class VideoEditor:
             item_path = item.get("path")
             
             try:
-                if item_type == "video":
-                    clip = VideoFileClip(item_path, audio=False)
-                else:
-                    clip = ImageClip(item_path)
-                
-                # Ajustar duración y tamaño
                 # Usar la duración estimada del segmento para el clip visual
                 clip_duration = item.get("segment_duration", 5)
+
+                if item_type == "video":
+                    # MEJORA: Cargar clip y asegurar que no intentamos leer frames inexistentes
+                    raw_clip = VideoFileClip(item_path, audio=False)
+                    
+                    # Si el video es más corto que lo que necesitamos, lo loopeamos
+                    if raw_clip.duration < clip_duration:
+                        clip = raw_clip.loop(duration=clip_duration)
+                    else:
+                        # Si es más largo, tomamos un subclip seguro (evitando el último frame problemático)
+                        safe_end = min(raw_clip.duration - 0.1, clip_duration)
+                        clip = raw_clip.subclip(0, safe_end).set_duration(clip_duration)
+                else:
+                    clip = ImageClip(item_path).set_duration(clip_duration)
+                
                 # Redimensionar y centrar/recortar en un solo paso para eficiencia
                 clip = clip.resize(height=target_h)
                 if clip.w > target_w:
@@ -64,7 +73,7 @@ class VideoEditor:
                     right = diff - left 
                     clip = clip.margin(left=left, right=right, color=(0,0,0))
                 
-                clip = clip.set_duration(clip_duration).set_start(current_time)
+                clip = clip.set_start(current_time)
                 clips.append(clip)
                 current_time += clip_duration
                 if current_time >= duration: break

@@ -2,6 +2,8 @@ import logging
 import os
 import random
 import time
+import subprocess
+import json
 from pathlib import Path
 from typing import Optional
 import requests
@@ -212,6 +214,36 @@ class MediaFetcher:
             logger.debug(f"AI Image error para '{keyword}': {e}")
             return None
 
+    def _validate_video(self, path: str) -> bool:
+        """
+        Valida que el video no esté corrupto usando ffprobe.
+        """
+        if not path.endswith(('.mp4', '.mov', '.avi')):
+            return True # Asumimos que imágenes son válidas si pasaron el check de tamaño
+            
+        try:
+            cmd = [
+                'ffprobe', 
+                '-v', 'error', 
+                '-show_entries', 'format=duration', 
+                '-of', 'default=noprint_wrappers=1:nokey=1', 
+                path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                logger.warning(f"ffprobe detectó error en {path}: {result.stderr}")
+                return False
+            
+            duration = float(result.stdout.strip())
+            if duration <= 0:
+                logger.warning(f"Video con duración cero detectado: {path}")
+                return False
+                
+            return True
+        except Exception as e:
+            logger.warning(f"Error validando video {path} con ffprobe: {e}")
+            return False
+
     def _download_file(self, url: str, path: str) -> bool:
         """
         Descarga un archivo y valida que no esté vacío o corrupto.
@@ -226,12 +258,17 @@ class MediaFetcher:
                     if chunk:
                         f.write(chunk)
             
-            # Validación de integridad: tamaño de archivo
+            # 1. Validación básica: tamaño de archivo
             file_size = os.path.getsize(path)
-            if file_size < 1024:  # Menos de 1KB es sospechoso para un video/imagen
+            if file_size < 1024:  # Menos de 1KB es sospechoso
                 logger.warning(f"Archivo descargado demasiado pequeño ({file_size} bytes): {path}")
-                if os.path.exists(path):
-                    os.remove(path)
+                if os.path.exists(path): os.remove(path)
+                return False
+            
+            # 2. Validación avanzada para videos: ffprobe
+            if not self._validate_video(path):
+                logger.warning(f"Video corrupto detectado por ffprobe: {path}")
+                if os.path.exists(path): os.remove(path)
                 return False
                 
             return True
