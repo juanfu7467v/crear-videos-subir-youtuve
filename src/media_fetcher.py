@@ -9,6 +9,32 @@ from src.movie_clips_fetcher import MovieClipsFetcher
 
 logger = logging.getLogger(__name__)
 
+def process_keywords(keywords_data):
+    """
+    Procesa las palabras clave asegurando que el resultado sea siempre una lista de strings.
+    Acepta tanto una lista de strings como una cadena separada por comas.
+    """
+    if not keywords_data:
+        return []
+    
+    if isinstance(keywords_data, list):
+        # Si ya es una lista, nos aseguramos de que todos los elementos sean strings y no estén vacíos
+        return [str(kw).strip() for kw in keywords_data if str(kw).strip()]
+    
+    if isinstance(keywords_data, str):
+        # Si es un string, lo dividimos por comas o ", "
+        # Reemplazamos ", " por "," para normalizar
+        normalized = keywords_data.replace(", ", ",")
+        return [kw.strip() for kw in normalized.split(",") if kw.strip()]
+    
+    # Para cualquier otro tipo, intentamos convertir a string y procesar, o devolvemos lista vacía
+    try:
+        str_data = str(keywords_data)
+        normalized = str_data.replace(", ", ",")
+        return [kw.strip() for kw in normalized.split(",") if kw.strip()]
+    except Exception:
+        return []
+
 PEXELS_BASE   = "https://api.pexels.com"
 PIXABAY_BASE  = "https://pixabay.com/api"
 POLLINATIONS  = "https://image.pollinations.ai/prompt"
@@ -41,7 +67,7 @@ class MediaFetcher:
         logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({format_label}) basado en el script segmentado.")
         
         for i, segment in enumerate(segmented_script):
-            segment_keywords = segment.get("keywords", "").split(", ")
+            segment_keywords = process_keywords(segment.get("keywords", ""))
             segment_duration = segment.get("estimated_duration", 5)
             segment_text = segment.get("segment_text", "")
 
@@ -91,7 +117,7 @@ class MediaFetcher:
         if not media_list:
             logger.warning("No se pudo descargar ningún media. Generando imágenes AI de fallback...")
             for i, segment in enumerate(segmented_script[:5]):
-                kw_fallback = random.choice(segment.get("keywords", "fallback").split(", "))
+                kw_fallback = random.choice(process_keywords(segment.get("keywords", "fallback")))
                 item = self._fetch_pollinations_image(kw_fallback, save_dir, f"fallback_{i}", is_short)
                 if item:
                     item["segment_duration"] = segment.get("estimated_duration", 5)
