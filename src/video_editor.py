@@ -22,9 +22,9 @@ class VideoEditor:
     def create_video(self, audio_path, media_list, script_data, format_type, output_path, music_dir="assets/music"):
         # 1. Cargar Audio Principal (TTS) para determinar duración
         tts_audio = AudioFileClip(audio_path)
-        duration = tts_audio.duration
+        duration = float(tts_audio.duration)
 
-        is_short = "short" in format_type.lower() if format_type else (duration <= 60.0)
+        is_short = "short" in str(format_type).lower() if format_type else (duration <= 60.0)
         
         target_h = 1920 if is_short else 1080
         target_w = 1080 if is_short else 1920
@@ -33,36 +33,52 @@ class VideoEditor:
         
         # 2. Preparar Clips Visuales
         clips = []
-        current_time = 0
-        for item in media_list:
-            if not Path(item.get("path")).exists(): continue
+        current_time = 0.0
+        for i, item in enumerate(media_list):
+            path_str = str(item.get("path", ""))
+            if not path_str or not Path(path_str).exists():
+                logger.warning(f"Clip {i} no encontrado o ruta vacía: {path_str}")
+                continue
             
-            item_type = item.get("type")
-            item_path = item.get("path")
-            source = item.get("source", "")
+            # Validación de tamaño de archivo (evitar 0 bytes)
+            if os.path.getsize(path_str) == 0:
+                logger.warning(f"Clip {i} tiene 0 bytes, saltando: {path_str}")
+                continue
+            
+            item_type = str(item.get("type", "video"))
+            source = str(item.get("source", ""))
             
             try:
-                clip_duration = item.get("segment_duration", 5)
+                # Asegurar que la duración sea float
+                try:
+                    clip_duration = float(item.get("segment_duration", 5.0))
+                except (TypeError, ValueError):
+                    clip_duration = 5.0
 
                 if item_type == "video":
-                    raw_clip = VideoFileClip(item_path, audio=False)
+                    # Cargar video con manejo de errores para archivos corruptos
+                    try:
+                        raw_clip = VideoFileClip(path_str, audio=False)
+                    except Exception as ve:
+                        logger.warning(f"Video corrupto detectado ({path_str}): {ve}")
+                        continue
                     
-                    if raw_clip.duration < clip_duration:
+                    raw_duration = float(raw_clip.duration)
+                    
+                    if raw_duration < clip_duration:
                         clip = raw_clip.loop(duration=clip_duration)
                     else:
-                        safe_end = min(raw_clip.duration - 0.1, clip_duration)
+                        # Evitar el último frame problemático
+                        safe_end = min(raw_duration - 0.1, clip_duration)
                         clip = raw_clip.subclip(0, safe_end).set_duration(clip_duration)
                     
                     # MEJORA COPYRIGHT: Aplicar cambios sutiles a clips reales
                     if "youtube" in source or "kinocheck" in source:
-                        # Espejo horizontal aleatorio
                         if random.random() > 0.5:
                             clip = clip.fx(vfx.mirror_x)
-                        
-                        # Zoom sutil (1.1x)
                         clip = clip.fx(vfx.resize, 1.1)
                 else:
-                    clip = ImageClip(item_path).set_duration(clip_duration)
+                    clip = ImageClip(path_str).set_duration(clip_duration)
                     # Zoom dinámico para imágenes
                     clip = clip.fx(vfx.resize, lambda t: 1 + 0.02*t)
                 
@@ -82,11 +98,11 @@ class VideoEditor:
                 current_time += clip_duration
                 if current_time >= duration: break
             except Exception as e:
-                logger.warning(f"Error procesando clip {item_path}: {e}")
+                logger.warning(f"Error procesando clip {path_str}: {e}")
                 continue
             
         if not clips:
-            logger.error("No se pudieron cargar clips visuales.")
+            logger.error("No se pudieron cargar clips visuales válidos.")
             raise Exception("No visual clips available")
 
         visual_base = concatenate_videoclips(clips, method="chain")
@@ -102,7 +118,7 @@ class VideoEditor:
                 bg_music = AudioFileClip(str(bg_music_path))
                 
                 bg_music = bg_music.volumex(0.15)
-                if bg_music.duration < duration:
+                if float(bg_music.duration) < duration:
                     bg_music = afx.audio_loop(bg_music, duration=duration)
                 else:
                     bg_music = bg_music.set_duration(duration)
@@ -113,7 +129,7 @@ class VideoEditor:
             logger.error(f"Error al añadir música de fondo: {e}")
 
         # 4. Añadir Subtítulos
-        full_script = script_data.get('full_script', '')
+        full_script = str(script_data.get('full_script', ''))
         subtitles = []
         
         import re
@@ -130,7 +146,7 @@ class VideoEditor:
             if s: sentences.append(s)
 
         if sentences:
-            time_per_sentence = duration / len(sentences)
+            time_per_sentence = float(duration) / len(sentences)
             for i, sentence in enumerate(sentences):
                 try:
                     fs = 120 if is_short else 80
@@ -144,7 +160,7 @@ class VideoEditor:
                         method='caption',
                         size=(target_w * 0.9, None),
                         align='center'
-                    ).set_start(i * time_per_sentence).set_duration(time_per_sentence).set_position(('center', target_h * 0.75))
+                    ).set_start(float(i * time_per_sentence)).set_duration(float(time_per_sentence)).set_position(('center', target_h * 0.75))
                     subtitles.append(txt_clip)
                 except Exception as e:
                     logger.warning(f"No se pudo crear subtítulo para '{sentence[:20]}...': {e}")
@@ -155,7 +171,7 @@ class VideoEditor:
         
         logger.info(f"Renderizando video final en {output_path}...")
         final_video.write_videofile(
-            output_path, 
+            str(output_path), 
             fps=24, 
             codec="libx264", 
             audio_codec="aac", 

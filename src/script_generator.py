@@ -49,12 +49,14 @@ class ScriptGenerator:
             "5. LLAMADA A LA ACCIÓN (CTA): Invita a suscribirse.\n\n"
             "REQUISITOS TÉCNICOS:\n"
             "- IDIOMA: Español natural.\n"
-            "- KEYWORDS: Para cada segmento, proporciona palabras clave en inglés que sean VISUALES y CONCRETAS (ej: 'man thinking', 'dark forest', 'explosion', 'crowded street'). EVITA conceptos abstractos como 'paradox', 'fate', 'destiny'.\n"
+            "- KEYWORDS VISUALES: Para cada segmento, proporciona palabras clave en inglés que sean SIMPLES, VISUALES y CONCRETAS. "
+            "Pexels no entiende conceptos abstractos. Usa términos como: 'man thinking', 'city traffic', 'cinematic landscape', 'close up face', 'technology', 'dark room'. "
+            "EVITA términos como 'paradox', 'spider-men', 'comic book' (si no son comunes en stock), 'fate', 'destiny'.\n"
             "- DURACIÓN: " + ("Máximo 55 segundos" if "short" in format_suggested else "Entre 3 y 5 minutos") + ".\n\n"
             "Responde ÚNICAMENTE con un objeto JSON que contenga:\n"
             "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script'.\n"
             f"En 'voice' usa siempre: {voz}.\n\n"
-            "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales en inglés) y 'estimated_duration'."
+            "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales simples en inglés) y 'estimated_duration'."
         )
         
         max_retries = 3
