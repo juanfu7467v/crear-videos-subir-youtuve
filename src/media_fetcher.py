@@ -147,8 +147,9 @@ class MediaFetcher:
             if not target: return None
             video_url = target["link"]
             filename = save_dir / f"{prefix}_pexels.mp4"
-            self._download_file(video_url, str(filename))
-            return {"path": str(filename), "type": "video", "duration": video.get("duration", 8), "keyword": keyword, "source": "pexels", "width": target.get("width", 1280), "height": target.get("height", 720)}
+            if self._download_file(video_url, str(filename)):
+                return {"path": str(filename), "type": "video", "duration": video.get("duration", 8), "keyword": keyword, "source": "pexels", "width": target.get("width", 1280), "height": target.get("height", 720)}
+            return None
         except Exception as e:
             logger.debug(f"Pexels video error para '{keyword}': {e}")
             return None
@@ -167,8 +168,9 @@ class MediaFetcher:
             img_url = photo.get("src", {}).get("large", photo.get("src", {}).get("original"))
             if not img_url: return None
             filename = save_dir / f"{prefix}_pexels.jpg"
-            self._download_file(img_url, str(filename))
-            return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pexels", "width": photo.get("width", 1080), "height": photo.get("height", 1920)}
+            if self._download_file(img_url, str(filename)):
+                return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pexels", "width": photo.get("width", 1080), "height": photo.get("height", 1920)}
+            return None
         except Exception as e:
             logger.debug(f"Pexels image error para '{keyword}': {e}")
             return None
@@ -190,8 +192,9 @@ class MediaFetcher:
             vid = videos.get("medium") or videos.get("small") or videos.get("large")
             if not vid or not vid.get("url"): return None
             filename = save_dir / f"{prefix}_pixabay.mp4"
-            self._download_file(vid["url"], str(filename))
-            return {"path": str(filename), "type": "video", "duration": hit.get("duration", 8), "keyword": keyword, "source": "pixabay", "width": vid.get("width", 1280), "height": vid.get("height", 720)}
+            if self._download_file(vid["url"], str(filename)):
+                return {"path": str(filename), "type": "video", "duration": hit.get("duration", 8), "keyword": keyword, "source": "pixabay", "width": vid.get("width", 1280), "height": vid.get("height", 720)}
+            return None
         except Exception as e:
             logger.debug(f"Pixabay video error para '{keyword}': {e}")
             return None
@@ -202,18 +205,41 @@ class MediaFetcher:
             encoded_kw = requests.utils.quote(keyword)
             url = f"{POLLINATIONS}/{encoded_kw}?width={w}&height={h}&model=flux&nologo=true"
             filename = save_dir / f"{prefix}_ai.jpg"
-            self._download_file(url, str(filename))
-            return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pollinations", "width": w, "height": h}
+            if self._download_file(url, str(filename)):
+                return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pollinations", "width": w, "height": h}
+            return None
         except Exception as e:
             logger.debug(f"AI Image error para '{keyword}': {e}")
             return None
 
-    def _download_file(self, url: str, path: str):
-        resp = self.session.get(url, stream=True, timeout=30)
-        resp.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
+    def _download_file(self, url: str, path: str) -> bool:
+        """
+        Descarga un archivo y valida que no esté vacío o corrupto.
+        Retorna True si la descarga fue exitosa y válida.
+        """
+        try:
+            resp = self.session.get(url, stream=True, timeout=30)
+            resp.raise_for_status()
+            
+            with open(path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            # Validación de integridad: tamaño de archivo
+            file_size = os.path.getsize(path)
+            if file_size < 1024:  # Menos de 1KB es sospechoso para un video/imagen
+                logger.warning(f"Archivo descargado demasiado pequeño ({file_size} bytes): {path}")
+                if os.path.exists(path):
+                    os.remove(path)
+                return False
+                
+            return True
+        except Exception as e:
+            logger.error(f"Error descargando {url}: {e}")
+            if os.path.exists(path):
+                os.remove(path)
+            return False
 
     def generate_thumbnail(self, topic: str, title: str, output_path: str, categoria: str = "general") -> bool:
         try:

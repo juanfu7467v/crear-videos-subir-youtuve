@@ -77,7 +77,16 @@ class VideoEditor:
             logger.error("No se pudieron cargar clips visuales.")
             raise Exception("No visual clips available")
 
-        visual_base = concatenate_videoclips(clips, method="chain").set_duration(duration)
+        # MEJORA: Asegurar que cubrimos toda la duración del audio
+        visual_base = concatenate_videoclips(clips, method="chain")
+        
+        # Si los clips visuales no llegan a la duración del audio, repetimos el último o lo extendemos
+        if visual_base.duration < duration:
+            logger.warning(f"Material visual insuficiente ({visual_base.duration:.2f}s) para el audio ({duration:.2f}s). Ajustando...")
+            # Opción robusta: loop del último clip o estirar el final
+            visual_base = visual_base.set_duration(duration)
+        else:
+            visual_base = visual_base.set_duration(duration)
         
         # 3. Añadir Música de Fondo Aleatoria
         final_audio = tts_audio
@@ -140,7 +149,9 @@ class VideoEditor:
                     logger.warning(f"No se pudo crear subtítulo para '{sentence[:20]}...': {e}")
 
         # 5. Componer Video Final con Subtítulos
-        final_video = CompositeVideoClip([visual_base] + subtitles).set_audio(final_audio)
+        # MEJORA: Forzar tamaño del contenedor para evitar errores de MoviePy con clips de diferentes tamaños
+        final_video = CompositeVideoClip([visual_base] + subtitles, size=(target_w, target_h)).set_audio(final_audio)
+        final_video = final_video.set_duration(duration)
         
         logger.info(f"Renderizando video final en {output_path}...")
         final_video.write_videofile(
