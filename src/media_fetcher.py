@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Optional
 import requests
+from src.movie_clips_fetcher import MovieClipsFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class MediaFetcher:
     def __init__(self, pexels_key: str, pixabay_key: str):
         self.pexels_key  = pexels_key
         self.pixabay_key = pixabay_key
+        self.movie_clips_fetcher = MovieClipsFetcher()
         self.session     = requests.Session()
         self.session.headers.update({"User-Agent": "ElTioJota-AutoVideo/1.0"})
 
@@ -55,6 +57,17 @@ class MediaFetcher:
         clips_needed = max(5, target_duration // 5) 
 
         logger.info(f"Buscando {clips_needed} clips para {target_duration}s de video ({'Short' if is_short else 'Largo'})")
+        
+        # MEJORA: Si es categoría películas, intentar obtener clips reales primero
+        if categoria and "películas" in categoria.lower():
+            movie_title = keywords[0] if keywords else video_id
+            movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, clips_needed // 2)
+            if movie_clips:
+                media_list.extend(movie_clips)
+                logger.info(f"✓ Se obtuvieron {len(movie_clips)} clips reales de la película.")
+                # Ajustar clips_needed para el resto del material
+                clips_needed = max(0, clips_needed - len(movie_clips))
+
         logger.info(f"Keywords principales: {', '.join(keywords)}")
 
         # Rotar entre keywords para variedad, asegurando que cubran todo el guion

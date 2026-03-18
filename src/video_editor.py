@@ -50,7 +50,9 @@ class VideoEditor:
                     clip = ImageClip(item_path)
                 
                 # Ajustar duración y tamaño
-                clip_duration = 5 if item_type == "image" else clip.duration
+                # MEJORA: Si es un clip real de película, limitar su duración a 8s para dinamismo
+                is_movie_clip = item.get("source") == "kinocheck_yt"
+                clip_duration = 5 if item_type == "image" else (8 if is_movie_clip else clip.duration)
                 # Redimensionar y centrar/recortar en un solo paso para eficiencia
                 clip = clip.resize(height=target_h)
                 if clip.w > target_w:
