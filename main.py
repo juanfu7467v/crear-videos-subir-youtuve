@@ -71,6 +71,13 @@ class VideoAutoPipeline:
             }
             script_data = self.script_gen.generate_full_script(input_data)
             
+            # VALIDACIÓN CRÍTICA DEL GUION
+            if not script_data or not script_data.get('full_script') or not script_data.get('segmented_script'):
+                logger.error("❌ ERROR: El guion no se generó correctamente tras varios intentos.")
+                logger.error("Deteniendo el proceso para evitar errores en cadena.")
+                self._stop_keep_alive()
+                return
+
             # Log de las mejoras implementadas
             logger.info(f"✨ Estilo de contenido: {script_data.get('estilo_contenido', 'N/A')}")
             logger.info(f"🪝 Hook generado: {script_data.get('hook', 'N/A')[:50]}...")
@@ -106,6 +113,14 @@ class VideoAutoPipeline:
                 categoria=categoria
             )
             
+            # VALIDACIÓN CRÍTICA DE MEDIA
+            if not media_list:
+                logger.error("❌ ERROR: No se pudo obtener ningún material visual para el video.")
+                logger.error("Deteniendo el proceso para evitar errores de edición.")
+                self._cleanup_assets(output_dir, temp_assets_dir)
+                self._stop_keep_alive()
+                return
+
             # 4. Editar Video
             logger.info("4/6 Editando video final...")
             video_path = str(output_dir / "final_video.mp4")
