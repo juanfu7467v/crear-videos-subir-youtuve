@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 import requests
 from src.movie_clips_fetcher import MovieClipsFetcher
+from src.youtube_downloader import YouTubeDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +38,12 @@ PIXABAY_BASE  = "https://pixabay.com/api"
 POLLINATIONS  = "https://image.pollinations.ai/prompt"
 
 class MediaFetcher:
-    def __init__(self, pexels_key: str, pixabay_key: str):
+    def __init__(self, pexels_key: str, pixabay_key: str, youtube_key: str = None):
         self.pexels_key  = pexels_key
         self.pixabay_key = pixabay_key
+        self.youtube_key = youtube_key or os.getenv("YOUTUBE_API_KEY")
         self.movie_clips_fetcher = MovieClipsFetcher()
+        self.youtube_downloader = YouTubeDownloader(api_key=self.youtube_key)
         self.session     = requests.Session()
         self.session.headers.update({"User-Agent": "ElTioJota-AutoVideo/1.0"})
 
@@ -63,20 +66,24 @@ class MediaFetcher:
         format_label = "Short" if is_short else "Largo"
         logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({format_label}) basado en el script segmentado.")
         
-        # Obtener clips reales de la película si la categoría es películas
+        # Obtener clips reales de la película (trailers)
         movie_clips = []
-        if categoria and "películas" in categoria.lower():
-            # Intentar obtener el título de la película del video_id o del primer segmento
-            movie_title = video_id
-            if segmented_script and segmented_script[0].get("segment_text"):
-                # Intentar extraer un título más limpio del texto del primer segmento
-                first_text = segmented_script[0].get("segment_text", "")
-                # Si el texto es largo, tomamos las primeras palabras o usamos el video_id
-                movie_title = " ".join(first_text.split()[:3])
-            
-            # Pedimos la mitad de los clips como reales para alternar
+        # Si no hay categoría explícita, intentamos deducir si es sobre una película por el video_id
+        # o simplemente usamos la nueva lógica de trailers para mayor calidad visual
+        movie_title = video_id
+        if segmented_script and segmented_script[0].get("segment_text"):
+            first_text = segmented_script[0].get("segment_text", "")
+            movie_title = " ".join(first_text.split()[:3])
+        
+        # Intentar obtener trailers de YouTube (Paso A y B de la solución)
+        logger.info(f"Intentando obtener trailers de YouTube para: {movie_title}")
+        movie_clips = self.youtube_downloader.fetch_trailer_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
+        
+        if not movie_clips and categoria and "películas" in categoria.lower():
+            # Fallback al fetcher original si YouTube falla y es explícitamente de películas
             movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
-            logger.info(f"Se obtuvieron {len(movie_clips)} clips reales de la película.")
+        
+        logger.info(f"Se obtuvieron {len(movie_clips)} clips de trailer/película para alternar.")
 
         for i, segment in enumerate(segmented_script):
             segment_keywords = process_keywords(segment.get("keywords", ""))

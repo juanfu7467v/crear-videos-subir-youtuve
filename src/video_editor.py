@@ -78,19 +78,26 @@ class VideoEditor:
                             clip = clip.fx(vfx.mirror_x)
                         clip = clip.fx(vfx.resize, 1.1)
                 else:
-                    clip = ImageClip(path_str).set_duration(clip_duration)
+                    clip = ImageClip(path_str).set_duration(float(clip_duration))
                     # Zoom dinámico para imágenes
                     clip = clip.fx(vfx.resize, lambda t: 1 + 0.02*t)
                 
                 # Redimensionar y centrar/recortar
                 clip = clip.resize(height=target_h)
-                if clip.w > target_w:
-                    x_center = clip.w / 2
-                    clip = clip.crop(x1=x_center - target_w / 2, y1=0, x2=x_center + target_w / 2, y2=target_h)
-                elif clip.w < target_w:
-                    diff = target_w - clip.w
-                    left = diff // 2
-                    right = diff - left 
+                
+                # Forzar valores float para evitar errores de tipo en comparaciones posteriores
+                clip_w = float(clip.w)
+                clip_h = float(clip.h)
+                target_w_f = float(target_w)
+                target_h_f = float(target_h)
+
+                if clip_w > target_w_f:
+                    x_center = clip_w / 2.0
+                    clip = clip.crop(x1=float(x_center - target_w_f / 2.0), y1=0.0, x2=float(x_center + target_w_f / 2.0), y2=target_h_f)
+                elif clip_w < target_w_f:
+                    diff = target_w_f - clip_w
+                    left = int(diff // 2)
+                    right = int(diff - left)
                     clip = clip.margin(left=left, right=right, color=(0,0,0))
                 
                 clip = clip.set_start(current_time)

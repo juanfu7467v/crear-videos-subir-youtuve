@@ -30,7 +30,11 @@ class VideoAutoPipeline:
     def __init__(self):
         self.script_gen      = ScriptGenerator(os.getenv("GEMINI_API_KEY", ""))
         self.tts_engine      = TTSEngine()
-        self.media_fetcher   = MediaFetcher(os.getenv("PEXELS_API_KEY", ""), os.getenv("PIXABAY_API_KEY", ""))
+        self.media_fetcher   = MediaFetcher(
+            os.getenv("PEXELS_API_KEY", ""), 
+            os.getenv("PIXABAY_API_KEY", ""),
+            os.getenv("YOUTUBE_API_KEY", "")
+        )
         self.video_editor    = VideoEditor()
         self.quality_checker = QualityChecker(os.getenv("GEMINI_API_KEY", ""))
         self.yt_uploader     = YouTubeUploader()
