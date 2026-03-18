@@ -24,9 +24,9 @@ class VideoEditor:
         tts_audio = AudioFileClip(audio_path)
         duration = tts_audio.duration
 
-        # Determinar si es Short basado en duración (máximo 60s para YouTube Shorts)
-        # El usuario pidió 60-70s pero YouTube corta a los 60s para Shorts.
-        is_short = duration <= 60.0
+        # Determinar si es Short basado en el format_type recibido o duración
+        # Si format_type contiene 'short', forzamos Short independientemente de la duración (aunque YouTube corta a 60s)
+        is_short = "short" in format_type.lower() if format_type else (duration <= 60.0)
         
         # Forzar resolución 9:16 para Shorts (1080x1920) y 16:9 para largos (1920x1080)
         target_h = 1920 if is_short else 1080
@@ -73,7 +73,10 @@ class VideoEditor:
                 continue
             
         # Concatenar y ajustar a la duración del audio
-        # method="chain" es más eficiente en memoria que "compose" para concatenaciones simples
+        if not clips:
+            logger.error("No se pudieron cargar clips visuales.")
+            raise Exception("No visual clips available")
+
         visual_base = concatenate_videoclips(clips, method="chain").set_duration(duration)
         
         # 3. Añadir Música de Fondo Aleatoria
@@ -99,11 +102,9 @@ class VideoEditor:
             logger.error(f"Error al añadir música de fondo: {e}")
 
         # 4. Añadir Subtítulos Automáticos (MEJORA)
-        # Dividimos el guion en frases cortas para los subtítulos
         full_script = script_data.get('full_script', '')
         subtitles = []
         
-        # Lógica de sincronización: dividir el texto en fragmentos manejables
         import re
         # Dividir por puntos, comas o saltos de línea
         raw_sentences = re.split(r'[.,!?\n]', full_script)
@@ -111,7 +112,6 @@ class VideoEditor:
         for s in raw_sentences:
             s = s.strip()
             if not s: continue
-            # Si la frase es muy larga (más de 60 caracteres), la dividimos para no saturar ImageMagick
             while len(s) > 60:
                 split_idx = s[:60].rfind(' ')
                 if split_idx == -1: split_idx = 60
@@ -123,20 +123,18 @@ class VideoEditor:
             time_per_sentence = duration / len(sentences)
             for i, sentence in enumerate(sentences):
                 try:
-                    # Ajustamos el tamaño de fuente para asegurar legibilidad sin exceder límites
-                    # MEJORA: Tamaño de subtítulos aumentado al doble (120 para Shorts, 80 para largos)
                     fs = 120 if is_short else 80
                     txt_clip = TextClip(
                         sentence, 
                         fontsize=fs, 
-                        color='yellow', # Cambiado a amarillo para mayor contraste
+                        color='yellow',
                         font='Liberation-Sans-Bold',
                         stroke_color='black',
-                        stroke_width=4, # Aumentado el borde para mayor legibilidad
+                        stroke_width=4,
                         method='caption',
-                        size=(target_w * 0.9, None), # Aumentado el ancho del área de texto
+                        size=(target_w * 0.9, None),
                         align='center'
-                    ).set_start(i * time_per_sentence).set_duration(time_per_sentence).set_position(('center', target_h * 0.75)) # Subido un poco para que no tape el borde inferior
+                    ).set_start(i * time_per_sentence).set_duration(time_per_sentence).set_position(('center', target_h * 0.75))
                     subtitles.append(txt_clip)
                 except Exception as e:
                     logger.warning(f"No se pudo crear subtítulo para '{sentence[:20]}...': {e}")
@@ -145,9 +143,6 @@ class VideoEditor:
         final_video = CompositeVideoClip([visual_base] + subtitles).set_audio(final_audio)
         
         logger.info(f"Renderizando video final en {output_path}...")
-        # threads=1 para procesamiento secuencial
-        # bitrate="2000k" para limitar el flujo de datos y RAM
-        # write_videofile puede consumir mucha RAM, por lo que cerramos clips después
         final_video.write_videofile(
             output_path, 
             fps=24, 
@@ -159,7 +154,7 @@ class VideoEditor:
             ffmpeg_params=["-crf", "28", "-tune", "stillimage"]
         )
         
-        # Limpieza exhaustiva para liberar RAM
+        # Limpieza
         final_video.close()
         visual_base.close()
         for c in clips:

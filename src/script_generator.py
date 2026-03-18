@@ -19,6 +19,8 @@ class ScriptGenerator:
         topic = trend_data.get('tema_recomendado') or trend_data.get('topic', 'curiosidades')
         canal = trend_data.get('canal', 'El Tío Jota')
         categoria = trend_data.get('categoria', 'general').lower()
+        user_prompt_ia = trend_data.get('prompt_ia')
+        format_suggested = trend_data.get('formato_sugerido', 'Short').lower()
         
         # Definir estilo base según el canal y categoría
         if "Criterio" in canal or "películas" in categoria:
@@ -28,13 +30,19 @@ class ScriptGenerator:
             estilo_base = "entusiasta, curioso, cercano y muy dinámico. Enfocado en sorprender al espectador con datos increíbles."
             voz = "es-MX-DaliaNeural" # Voz femenina carismática
 
-        # MEJORA: Prompt ultra-detallado para experto en YouTube
-        prompt = (
+        # Construir el prompt para la IA
+        # Si el usuario provee un prompt_ia, lo integramos como la instrucción de personalidad/estilo
+        base_instruction = user_prompt_ia if user_prompt_ia else (
             f"Actúa como un experto creador de contenido para YouTube y estratega de viralidad. "
-            f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo.\n\n"
+            f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo."
+        )
+
+        prompt = (
+            f"{base_instruction}\n\n"
             f"TEMA: {topic}\n"
             f"CATEGORÍA: {categoria}\n"
-            f"ESTILO REQUERIDO: Intrintrante, entretenido y dinámico. {estilo_base}\n\n"
+            f"FORMATO: {format_suggested}\n"
+            f"ESTILO REQUERIDO: {estilo_base}\n\n"
             "ESTRUCTURA OBLIGATORIA DEL CONTENIDO:\n"
             "1. INICIO IMPACTANTE (HOOK): Una frase poderosa en los primeros 5 segundos que genere una curiosidad irresistible o rompa un patrón.\n"
             "2. DESARROLLO INTERESANTE: Explicación clara con datos sorprendentes, ritmo ágil y sin rellenos. Usa frases cortas para mantener el dinamismo.\n"
@@ -45,6 +53,7 @@ class ScriptGenerator:
             "- IDIOMA: Español natural, claro y directo.\n"
             "- LIMPIEZA: No uses símbolos como (*, _, -, #) en el 'full_script'. Sin acotaciones de escena.\n"
             "- KEYWORDS: 8-10 términos descriptivos en inglés para búsqueda de material visual.\n"
+            "- DURACIÓN: " + ("Máximo 55 segundos de locución (aprox 130-140 palabras)" if "short" in format_suggested else "Entre 3 y 5 minutos de locución (aprox 450-750 palabras)") + ".\n"
             "- CAMPOS ADICIONALES: Debes incluir 'prompt_ia', 'estilo_contenido', 'hook' y 'estructura' en el JSON.\n\n"
             "Responde ÚNICAMENTE con un objeto JSON que contenga las siguientes llaves:\n"
             "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script'.\n"

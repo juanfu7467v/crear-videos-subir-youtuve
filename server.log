@@ -1,0 +1,38 @@
+2026-03-18 12:36:38,617 [INFO] src.web_server: Inicializando Pipeline de Video...
+2026-03-18 12:36:38,618 [INFO] src.video_editor: Inicializando VideoEditor...
+2026-03-18 12:36:38,620 [INFO] src.web_server: ✅ Servidor receptor de peticiones listo en puerto 8080
+2026-03-18 12:36:38,620 [INFO] src.web_server: Esperando peticiones POST en http://0.0.0.0:8080/trigger-video
+127.0.0.1 - - [18/Mar/2026 12:36:45] "POST / HTTP/1.1" 404 -
+127.0.0.1 - - [18/Mar/2026 12:36:47] "POST / HTTP/1.1" 404 -
+127.0.0.1 - - [18/Mar/2026 12:36:49] "POST / HTTP/1.1" 404 -
+2026-03-18 12:36:50,730 [INFO] src.web_server: 🚀 Solicitud recibida para: Análisis de películas
+2026-03-18 12:36:50,730 [INFO] src.web_server: Iniciando pipeline de creación de video en segundo plano...
+2026-03-18 12:36:50,731 [INFO] AutoVideo: ═══ INICIANDO PRODUCCIÓN DE: Análisis de películas (películas) ═══
+127.0.0.1 - - [18/Mar/2026 12:36:50] "POST /trigger-video HTTP/1.1" 202 -
+2026-03-18 12:36:50,731 [INFO] AutoVideo: Formato: shorts | Canal: CHANNEL_NAME
+2026-03-18 12:36:50,731 [INFO] AutoVideo: 📡 Keep-alive usará la URL: http://localhost:8080/keep-alive
+2026-03-18 12:36:50,731 [INFO] AutoVideo: ✅ Keep-alive mechanism started.
+2026-03-18 12:36:50,733 [INFO] AutoVideo: 1/6 Generando guion y metadatos...
+127.0.0.1 - - [18/Mar/2026 12:36:50] "GET /keep-alive HTTP/1.1" 200 -
+2026-03-18 12:36:50,830 [ERROR] src.script_generator: Error API 403: {
+  "error": {
+    "code": 403,
+    "message": "Method doesn't allow unregistered callers (callers without established identity). Please use API Key or other form of API consumer identity to call this API.",
+    "status": "PERMISSION_DENIED"
+  }
+}
+
+2026-03-18 12:36:50,831 [INFO] AutoVideo: ✨ Estilo de contenido: Intrigante
+2026-03-18 12:36:50,831 [INFO] AutoVideo: 🪝 Hook generado: ¡Detente! ¿Sabías que lo que estás a punto de ver ...
+2026-03-18 12:36:50,831 [INFO] AutoVideo: 2/6 Generando audio...
+2026-03-18 12:36:50,832 [INFO] src.tts_engine: Generando TTS con voz: es-MX-DaliaNeural
+127.0.0.1 - - [18/Mar/2026 12:36:51] "POST / HTTP/1.1" 404 -
+127.0.0.1 - - [18/Mar/2026 12:36:53] "POST / HTTP/1.1" 404 -
+2026-03-18 12:36:53,560 [INFO] AutoVideo: 3/6 Buscando material visual...
+2026-03-18 12:36:53,648 [INFO] src.media_fetcher: Buscando 2 clips para 120s de video (Short) basado en el script segmentado.
+2026-03-18 12:36:53,648 [INFO] src.media_fetcher: Buscando media para segmento 1 (duración 5s) con palabra clave: mind-blowing
+2026-03-18 12:36:53,648 [INFO] src.movie_clips_fetcher: 🎬 Buscando clips reales para la película: ¡Detente!
+127.0.0.1 - - [18/Mar/2026 12:36:55] "POST / HTTP/1.1" 404 -
+2026-03-18 12:36:56,705 [INFO] src.movie_clips_fetcher: Se encontraron 0 videos en KinoCheck.
+2026-03-18 12:36:56,705 [WARNING] src.movie_clips_fetcher: No se encontraron videos en KinoCheck para TMDB ID 18825
+127.0.0.1 - - [18/Mar/2026 12:36:57] "POST / HTTP/1.1" 404 -

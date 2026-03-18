@@ -1,12 +1,3 @@
-"""
-media_fetcher.py
-─────────────────
-Descarga clips de video e imágenes de APIs gratuitas:
-- Pexels API (videos e imágenes HD gratuitos)
-- Pixabay API (videos e imágenes gratuitos)
-- Pollinations.ai (imágenes generadas por IA, gratis)
-"""
-
 import logging
 import os
 import random
@@ -22,12 +13,7 @@ PEXELS_BASE   = "https://api.pexels.com"
 PIXABAY_BASE  = "https://pixabay.com/api"
 POLLINATIONS  = "https://image.pollinations.ai/prompt"
 
-
 class MediaFetcher:
-    """
-    Descarga media visual (clips e imágenes) de fuentes gratuitas.
-    """
-
     def __init__(self, pexels_key: str, pixabay_key: str):
         self.pexels_key  = pexels_key
         self.pixabay_key = pixabay_key
@@ -35,7 +21,6 @@ class MediaFetcher:
         self.session     = requests.Session()
         self.session.headers.update({"User-Agent": "ElTioJota-AutoVideo/1.0"})
 
-    # ─── Entry point principal ────────────────────────────────
     def fetch_media_for_video(
         self,
         segmented_script: list,
@@ -46,66 +31,61 @@ class MediaFetcher:
         is_short: bool = True,
         categoria: Optional[str] = None
     ) -> list:
-        """
-        Descarga toda la media necesaria para un video, asegurando coherencia visual.
-        """
         save_dir = Path(save_dir) / video_id
         save_dir.mkdir(parents=True, exist_ok=True)
 
         media_list = []
         total_clips_needed = len(segmented_script)
 
-        logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({\'Short\' if is_short else \'Largo\'}) basado en el script segmentado.")
+        format_label = "Short" if is_short else "Largo"
+        logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({format_label}) basado en el script segmentado.")
         
         for i, segment in enumerate(segmented_script):
             segment_keywords = segment.get("keywords", "").split(", ")
-            segment_duration = segment.get("estimated_duration", 5) # Duración por defecto si no se especifica
+            segment_duration = segment.get("estimated_duration", 5)
             segment_text = segment.get("segment_text", "")
 
             if not segment_keywords or segment_keywords == ['']:
                 logger.warning(f"Segmento {i+1} sin palabras clave. Saltando.")
                 continue
             
-            kw = random.choice(segment_keywords) # Tomar una palabra clave aleatoria del segmento
+            kw = random.choice(segment_keywords)
             logger.info(f"Buscando media para segmento {i+1} (duración {segment_duration}s) con palabra clave: {kw}")
 
             try:
                 media_item = None
                 orientation = "portrait" if is_short else "landscape"
 
-                # Priorizar clips de película si la categoría es de películas
                 if categoria and "películas" in categoria.lower():
-                    movie_title = segment_text.split(" ")[0] if segment_text else video_id # Usar la primera palabra del segmento como título tentativo
-                    movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, 1) # Solo 1 clip por segmento
+                    movie_title = segment_text.split(" ")[0] if segment_text else video_id
+                    movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, 1)
                     if movie_clips:
                         media_item = movie_clips[0]
                         logger.info(f"✓ Se obtuvo clip real de película para segmento {i+1}.")
 
                 if not media_item:
-                    # Intentar video de stock primero para realismo
                     if prefer_video and self.pexels_key:
                         media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}", orientation)
                     
                     if not media_item and self.pixabay_key:
                         media_item = self._fetch_pixabay_video(kw, save_dir, f"clip_{i:03d}")
                 
-                # Si no hay video o toca imagen IA
                 if not media_item:
                     media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:03d}", is_short)
 
-                # Fallback final a imagen de stock
                 if not media_item and self.pexels_key:
                     media_item = self._fetch_pexels_image(kw, save_dir, f"img_{i:03d}", orientation)
 
                 if media_item:
-                    media_item["segment_duration"] = segment_duration # Guardar la duración estimada del segmento
+                    media_item["segment_duration"] = segment_duration
                     media_list.append(media_item)
-                    logger.debug(f"  [{i+1}/{total_clips_needed}] ✓ {kw}: {media_item[\'path\']}")
+                    media_path = media_item['path']
+                    logger.debug(f"  [{i+1}/{total_clips_needed}] ✓ {kw}: {media_path}")
 
-                time.sleep(0.2)  # Rate limiting ligero
+                time.sleep(0.2)
 
             except Exception as e:
-                logger.warning(f"Error descargando media para \'{kw}\' en segmento {i+1}: {e}")
+                logger.warning(f"Error descargando media para '{kw}' en segmento {i+1}: {e}")
                 continue
 
         if not media_list:
@@ -120,332 +100,103 @@ class MediaFetcher:
         logger.info(f"Media total descargada: {len(media_list)} elementos")
         return media_list
 
-    # ─── Pexels Videos ───────────────────────────────────────
     def _fetch_pexels_video(self, keyword: str, save_dir: Path, prefix: str, orientation: str = "portrait") -> Optional[dict]:
-        """Descarga un clip de video de Pexels."""
-        if not self.pexels_key:
-            return None
-
+        if not self.pexels_key: return None
         try:
             url = f"{PEXELS_BASE}/videos/search"
-            params = {
-                "query": keyword,
-                "per_page": 15,
-                "orientation": orientation,
-                "size": "medium",
-            }
+            params = {"query": keyword, "per_page": 15, "orientation": orientation, "size": "medium"}
             headers = {"Authorization": self.pexels_key}
-
             resp = self.session.get(url, params=params, headers=headers, timeout=15)
             resp.raise_for_status()
             data = resp.json()
-
             videos = data.get("videos", [])
             if not videos:
                 params["orientation"] = "landscape"
                 resp = self.session.get(url, params=params, headers=headers, timeout=15)
                 videos = resp.json().get("videos", [])
-
-            if not videos:
-                return None
-
+            if not videos: return None
             video = random.choice(videos[:5])
-            video_files = sorted(
-                video.get("video_files", []),
-                key=lambda x: x.get("width", 0)
-            )
-            target = next(
-                (f for f in video_files if f.get("width", 0) <= 1280 and f.get("height", 0) >= 480),
-                video_files[0] if video_files else None
-            )
-
-            if not target:
-                return None
-
+            video_files = sorted(video.get("video_files", []), key=lambda x: x.get("width", 0))
+            target = next((f for f in video_files if f.get("width", 0) <= 1280 and f.get("height", 0) >= 480), video_files[0] if video_files else None)
+            if not target: return None
             video_url = target["link"]
             filename = save_dir / f"{prefix}_pexels.mp4"
-
             self._download_file(video_url, str(filename))
-
-            return {
-                "path": str(filename),
-                "type": "video",
-                "duration": video.get("duration", 8),
-                "keyword": keyword,
-                "source": "pexels",
-                "width": target.get("width", 1280),
-                "height": target.get("height", 720),
-            }
-
+            return {"path": str(filename), "type": "video", "duration": video.get("duration", 8), "keyword": keyword, "source": "pexels", "width": target.get("width", 1280), "height": target.get("height", 720)}
         except Exception as e:
             logger.debug(f"Pexels video error para '{keyword}': {e}")
             return None
 
-    # ─── Pexels Images ────────────────────────────────────────
     def _fetch_pexels_image(self, keyword: str, save_dir: Path, prefix: str, orientation: str = "portrait") -> Optional[dict]:
-        """Descarga una imagen de Pexels."""
-        if not self.pexels_key:
-            return None
-
+        if not self.pexels_key: return None
         try:
             url = f"{PEXELS_BASE}/v1/search"
             params = {"query": keyword, "per_page": 10, "orientation": orientation}
             headers = {"Authorization": self.pexels_key}
-
             resp = self.session.get(url, params=params, headers=headers, timeout=15)
             resp.raise_for_status()
             photos = resp.json().get("photos", [])
-
-            if not photos:
-                return None
-
+            if not photos: return None
             photo = random.choice(photos[:5])
             img_url = photo.get("src", {}).get("large", photo.get("src", {}).get("original"))
-
-            if not img_url:
-                return None
-
+            if not img_url: return None
             filename = save_dir / f"{prefix}_pexels.jpg"
             self._download_file(img_url, str(filename))
-
-            return {
-                "path": str(filename),
-                "type": "image",
-                "duration": 5,
-                "keyword": keyword,
-                "source": "pexels",
-                "width": photo.get("width", 1080),
-                "height": photo.get("height", 1920),
-            }
-
+            return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pexels", "width": photo.get("width", 1080), "height": photo.get("height", 1920)}
         except Exception as e:
             logger.debug(f"Pexels image error para '{keyword}': {e}")
             return None
 
-    # ─── Pixabay Videos ──────────────────────────────────────
     def _fetch_pixabay_video(self, keyword: str, save_dir: Path, prefix: str) -> Optional[dict]:
-        """Descarga un clip de video de Pixabay."""
-        if not self.pixabay_key:
-            return None
-
+        if not self.pixabay_key: return None
         try:
-            params = {
-                "key": self.pixabay_key,
-                "q": keyword,
-                "video_type": "film",
-                "per_page": 10,
-                "safesearch": "true",
-                "lang": "es",
-            }
+            params = {"key": self.pixabay_key, "q": keyword, "video_type": "film", "per_page": 10, "safesearch": "true", "lang": "es"}
             resp = self.session.get(f"{PIXABAY_BASE}/videos/", params=params, timeout=15)
             resp.raise_for_status()
             hits = resp.json().get("hits", [])
-
             if not hits:
                 params["lang"] = "en"
                 resp = self.session.get(f"{PIXABAY_BASE}/videos/", params=params, timeout=15)
                 hits = resp.json().get("hits", [])
-
-            if not hits:
-                return None
-
+            if not hits: return None
             hit = random.choice(hits[:5])
             videos = hit.get("videos", {})
             vid = videos.get("medium") or videos.get("small") or videos.get("large")
-
-            if not vid or not vid.get("url"):
-                return None
-
+            if not vid or not vid.get("url"): return None
             filename = save_dir / f"{prefix}_pixabay.mp4"
             self._download_file(vid["url"], str(filename))
-
-            return {
-                "path": str(filename),
-                "type": "video",
-                "duration": hit.get("duration", 8),
-                "keyword": keyword,
-                "source": "pixabay",
-                "width": vid.get("width", 1280),
-                "height": vid.get("height", 720),
-            }
-
+            return {"path": str(filename), "type": "video", "duration": hit.get("duration", 8), "keyword": keyword, "source": "pixabay", "width": vid.get("width", 1280), "height": vid.get("height", 720)}
         except Exception as e:
             logger.debug(f"Pixabay video error para '{keyword}': {e}")
             return None
 
-    # ─── Pollinations AI Images ───────────────────────────────
-    def _fetch_pollinations_image(self, keyword: str, save_dir: Path, prefix: str, is_short: bool = True) -> Optional[dict]:
-        """
-        Genera imagen IA con Pollinations.ai (totalmente gratis).
-        """
+    def _fetch_pollinations_image(self, keyword: str, save_dir: Path, prefix: str, is_short: bool) -> Optional[dict]:
         try:
-            prompt = self._build_image_prompt(keyword)
-            encoded = requests.utils.quote(prompt)
-
-            # Configurar resolución según formato
-            width = 1080 if is_short else 1920
-            height = 1920 if is_short else 1080
-            
-            url = f"{POLLINATIONS}/{encoded}?width={width}&height={height}&seed={random.randint(1,999999)}&nologo=true"
-
+            w, h = (1080, 1920) if is_short else (1920, 1080)
+            encoded_kw = requests.utils.quote(keyword)
+            url = f"{POLLINATIONS}/{encoded_kw}?width={w}&height={h}&model=flux&nologo=true"
             filename = save_dir / f"{prefix}_ai.jpg"
-
-            resp = self.session.get(url, timeout=30, stream=True)
-            resp.raise_for_status()
-
-            with open(filename, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            if filename.stat().st_size < 10000:
-                filename.unlink(missing_ok=True)
-                return None
-
-            return {
-                "path": str(filename),
-                "type": "image",
-                "duration": 5,
-                "keyword": keyword,
-                "source": "pollinations",
-                "width": 1080,
-                "height": 1920,
-            }
-
+            self._download_file(url, str(filename))
+            return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pollinations", "width": w, "height": h}
         except Exception as e:
-            logger.debug(f"Pollinations error para '{keyword}': {e}")
+            logger.debug(f"AI Image error para '{keyword}': {e}")
             return None
 
-    def _build_image_prompt(self, keyword: str) -> str:
-        """Crea un prompt mejorado para generación de imagen IA."""
-        styles = [
-            "cinematic lighting, professional photography, highly detailed",
-            "vibrant colors, high contrast, masterpiece",
-            "dramatic composition, 8K resolution, unreal engine 5 render",
-            "photorealistic, stunning visual, sharp focus",
-            "editorial photography style, artistic lighting",
-        ]
-        style = random.choice(styles)
-        return f"{keyword}, {style}, vertical format, high quality, no text, no watermark"
-
-    def _fetch_yarn_clip(self, keyword: str, save_dir: Path, prefix: str) -> Optional[dict]:
-        """Extrae un fragmento de video de GetYarn.io."""
-        try:
-            # GetYarn no tiene API oficial pública pero podemos buscar via web
-            search_url = f"https://getyarn.io/yarn-find?text={requests.utils.quote(keyword)}"
-            resp = self.session.get(search_url, timeout=10)
-            if resp.status_code != 200: return None
-            
-            # Buscar el primer clip ID en el HTML
-            import re
-            match = re.search(r'/yarn-clip/([a-f0-9\-]+)', resp.text)
-            if not match: return None
-            
-            clip_id = match.group(1)
-            video_url = f"https://y.yarn.co/{clip_id}.mp4"
-            filename = save_dir / f"{prefix}_yarn.mp4"
-            
-            self._download_file(video_url, str(filename))
-            
-            return {
-                "path": str(filename),
-                "type": "video",
-                "duration": 5, # Duración estimada
-                "keyword": keyword,
-                "source": "getyarn"
-            }
-        except Exception as e:
-            logger.debug(f"GetYarn error para '{keyword}': {e}")
-            return None
-
-    def _fetch_tmdb_thumbnail(self, movie_title: str, save_path: str) -> Optional[str]:
-        """Obtiene una miniatura de película desde TMDB."""
-        tmdb_key = os.getenv("TMDB_API_KEY")
-        if not tmdb_key:
-            logger.warning("TMDB_API_KEY no configurada. Saltando miniatura de TMDB.")
-            return None
-            
-        try:
-            # 1. Buscar película
-            search_url = f"https://api.themoviedb.org/3/search/movie"
-            params = {"api_key": tmdb_key, "query": movie_title, "language": "es-ES"}
-            resp = self.session.get(search_url, params=params, timeout=10)
-            resp.raise_for_status()
-            
-            results = resp.json().get("results", [])
-            if not results: return None
-            
-            # 2. Obtener el backdrop_path del primer resultado
-            backdrop_path = results[0].get("backdrop_path")
-            if not backdrop_path: return None
-            
-            # 3. Descargar imagen
-            img_url = f"https://image.tmdb.org/t/p/w1280{backdrop_path}"
-            self._download_file(img_url, save_path)
-            
-            logger.info(f"Miniatura de TMDB descargada para '{movie_title}': {save_path}")
-            return save_path
-        except Exception as e:
-            logger.error(f"Error en TMDB para '{movie_title}': {e}")
-            return None
-
-    # ─── Descarga genérica ────────────────────────────────────
-    def _download_file(self, url: str, save_path: str, max_size_mb: int = 50):
-        """Descarga un archivo con límite de tamaño."""
-        max_bytes = max_size_mb * 1024 * 1024
-
-        resp = self.session.get(url, timeout=60, stream=True)
+    def _download_file(self, url: str, path: str):
+        resp = self.session.get(url, stream=True, timeout=30)
         resp.raise_for_status()
-
-        downloaded = 0
-        with open(save_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=65536):
-                downloaded += len(chunk)
-                if downloaded > max_bytes:
-                    logger.warning(f"Archivo muy grande, truncando en {max_size_mb}MB")
-                    break
+        with open(path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
                 f.write(chunk)
 
-        size_mb = Path(save_path).stat().st_size / (1024 * 1024)
-        logger.debug(f"Descargado: {save_path} ({size_mb:.2f} MB)")
-
-    # ─── Thumbnails ───────────────────────────────────────────
-    def generate_thumbnail(
-        self,
-        topic: str,
-        title: str,
-        save_path: str,
-        style: str = "youtube_thumbnail",
-        categoria: str = "general"
-    ) -> Optional[str]:
-        """
-        Genera una miniatura para YouTube usando TMDB (si es películas) o Pollinations.ai.
-        """
-        # MEJORA: Si es categoría películas, usar TMDB
-        if "películas" in categoria.lower():
-            tmdb_thumb = self._fetch_tmdb_thumbnail(topic, save_path)
-            if tmdb_thumb: return tmdb_thumb
-
-        # Fallback a Pollinations AI
-        prompt = (
-            f"YouTube thumbnail for a video about {topic}, {style}, "
-            f"bold colors, eye-catching, professional, "
-            f"16:9 aspect ratio, high quality, no text overlay"
-        )
-
+    def generate_thumbnail(self, topic: str, title: str, output_path: str, categoria: str = "general") -> bool:
         try:
-            encoded = requests.utils.quote(prompt)
-            url = f"{POLLINATIONS}/{encoded}?width=1280&height=720&seed={random.randint(1,999999)}&nologo=true"
-
-            resp = self.session.get(url, timeout=30)
-            resp.raise_for_status()
-
-            Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(save_path, "wb") as f:
-                f.write(resp.content)
-
-            logger.info(f"Thumbnail generada: {save_path}")
-            return save_path
-
+            w, h = (1280, 720)
+            prompt = f"YouTube Thumbnail for video about {topic}, title: {title}, cinematic, high quality, professional"
+            encoded_prompt = requests.utils.quote(prompt)
+            url = f"{POLLINATIONS}/{encoded_prompt}?width={w}&height={h}&model=flux&nologo=true"
+            self._download_file(url, output_path)
+            return True
         except Exception as e:
-            logger.error(f"Error generando thumbnail: {e}")
-            return None
+            logger.error(f"Error generando miniatura: {e}")
+            return False

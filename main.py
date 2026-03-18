@@ -52,27 +52,28 @@ class VideoAutoPipeline:
             format_suggested = trend_data.get('formato_sugerido', 'Short')
             optimal_time = trend_data.get('hora_optima_publicacion')
             categoria = trend_data.get('categoria', 'general')
+            canal = trend_data.get('canal', 'CHANNEL_NAME')
 
             logger.info(f"═══ INICIANDO PRODUCCIÓN DE: {topic} ({categoria}) ═══")
+            logger.info(f"Formato: {format_suggested} | Canal: {canal}")
             self._start_keep_alive()
 
-            
             # 1. Generar Guion extendido usando la idea de contenido
-            logger.info("1/6 Generando guion y metadatos con prompt optimizado...")
-            # Enriquecemos el trend_data para el generador de guiones
+            logger.info("1/6 Generando guion y metadatos...")
             input_data = {
-                "topic": topic,
-                "suggested_title": title_suggested,
-                "content_idea": content_idea,
-                "canal": trend_data.get('canal', 'CHANNEL_NAME'),
-                "categoria": categoria
+                "tema_recomendado": topic,
+                "titulo": title_suggested,
+                "idea_contenido": content_idea,
+                "formato_sugerido": format_suggested,
+                "canal": canal,
+                "categoria": categoria,
+                "prompt_ia": trend_data.get('prompt_ia')
             }
             script_data = self.script_gen.generate_full_script(input_data)
             
             # Log de las mejoras implementadas
             logger.info(f"✨ Estilo de contenido: {script_data.get('estilo_contenido', 'N/A')}")
             logger.info(f"🪝 Hook generado: {script_data.get('hook', 'N/A')[:50]}...")
-            logger.info(f"🏗️ Estructura: {script_data.get('estructura', 'N/A')}")
             
             # Usar el título sugerido si el generador no dio uno mejor
             video_title = script_data.get('title') or title_suggested or topic
@@ -91,9 +92,9 @@ class VideoAutoPipeline:
             # 3. Descargar Media (Videos/Imágenes)
             logger.info("3/6 Buscando material visual...")
             duration = self.tts_engine.get_audio_duration(audio_path)
-            is_short = duration <= 60.0
-            keywords = script_data.get('keywords', [topic])
-            if isinstance(keywords, str): keywords = [k.strip() for k in keywords.split(',')]
+            
+            # Decidir si es short para la descarga de media
+            is_short = "short" in format_suggested.lower() or duration <= 60.0
             
             media_list = self.media_fetcher.fetch_media_for_video(
                 segmented_script=script_data.get("segmented_script", []),
@@ -140,8 +141,8 @@ class VideoAutoPipeline:
                 title=video_title,
                 description=script_data.get('description', ''),
                 tags=script_data.get('tags', []),
-                channel_name=trend_data.get('canal', 'CHANNEL_NAME'),
-                is_short=("short" in format_suggested.lower()),
+                channel_name=canal,
+                is_short=is_short,
                 publish_at=publish_time,
                 thumbnail_path=thumbnail_path,
                 category_id=yt_category,
@@ -157,7 +158,6 @@ class VideoAutoPipeline:
             self._cleanup_assets(output_dir, temp_assets_dir)
             self._stop_keep_alive()
 
-
         except Exception as e:
             logger.error(f"❌ Error crítico en pipeline: {e}")
             import traceback
@@ -166,16 +166,13 @@ class VideoAutoPipeline:
             self._cleanup_assets(output_dir, temp_assets_dir)
             self._stop_keep_alive()
 
-
     def _cleanup_assets(self, output_dir: Path, temp_assets_dir: Path):
         """Elimina archivos temporales generados durante el proceso."""
         try:
-            # 1. Eliminar directorio de salida (audio, video final, miniatura)
             if output_dir.exists():
                 shutil.rmtree(output_dir)
                 logger.info(f"🗑️ Eliminado directorio de salida: {output_dir}")
             
-            # 2. Eliminar clips y media temporal
             if temp_assets_dir.exists():
                 shutil.rmtree(temp_assets_dir)
                 logger.info(f"🗑️ Eliminado directorio de media temporal: {temp_assets_dir}")
@@ -184,7 +181,6 @@ class VideoAutoPipeline:
             logger.warning(f"⚠️ Error durante la limpieza de residuos: {e}")
 
     def _keep_alive_task(self):
-        # Intentar obtener la URL pública de Fly.io
         app_name = os.getenv("FLY_APP_NAME")
         base_url = f"https://{app_name}.fly.dev" if app_name else "http://localhost:8080"
         
@@ -192,14 +188,11 @@ class VideoAutoPipeline:
         
         while self.keep_alive_running:
             try:
-                # Realizar una petición externa real para que Fly.io detecte tráfico
-                # y no apague la máquina por "inactividad" durante el renderizado.
                 requests.get(f"{base_url}/keep-alive", timeout=10)
                 logger.debug("❤️ Keep-alive signal sent to public endpoint.")
             except requests.exceptions.RequestException as e:
                 logger.warning(f"⚠️ Error sending keep-alive signal: {e}")
             
-            # Esperar 30 segundos entre señales para asegurar que Fly.io vea tráfico constante
             time.sleep(30)
 
     def _start_keep_alive(self):
@@ -211,7 +204,7 @@ class VideoAutoPipeline:
     def _stop_keep_alive(self):
         self.keep_alive_running = False
         if self.keep_alive_thread and self.keep_alive_thread.is_alive():
-            self.keep_alive_thread.join(timeout=5) # Give it a moment to stop
+            self.keep_alive_thread.join(timeout=5)
         logger.info("✅ Keep-alive mechanism stopped.")
 
 

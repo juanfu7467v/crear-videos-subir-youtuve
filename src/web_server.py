@@ -11,7 +11,7 @@ class PipelineHandler(BaseHTTPRequestHandler):
 
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS, GET")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def do_OPTIONS(self):
@@ -22,6 +22,8 @@ class PipelineHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/keep-alive":
             self._respond(200, {"status": "alive"})
+        elif self.path == "/status":
+            self._respond(200, {"status": "ready", "message": "Servidor pasivo de creación de videos activo"})
         else:
             self._respond(404, {"error": "Ruta no encontrada"})
 
@@ -38,18 +40,22 @@ class PipelineHandler(BaseHTTPRequestHandler):
                     return
 
                 if self.pipeline_ref:
-                    logger.info(f"🚀 Recibida información de tendencia: {post_data.get('tema_recomendado', 'Sin tema')}")
+                    topic = post_data.get('tema_recomendado') or post_data.get('topic', 'Sin tema')
+                    logger.info(f"🚀 Solicitud recibida para: {topic}")
                     logger.info("Iniciando pipeline de creación de video en segundo plano...")
                     
+                    # Ejecutar el pipeline en un hilo separado para no bloquear la respuesta HTTP
                     thread = threading.Thread(
                         target=self.pipeline_ref.run_full_pipeline_with_data,
                         args=(post_data,),
                         daemon=True
                     )
                     thread.start()
+                    
                     self._respond(202, {
                         "status": "iniciado",
-                        "mensaje": "El sistema ha recibido la información y está procesando el video automáticamente."
+                        "tema": topic,
+                        "mensaje": "El sistema ha recibido la solicitud y está procesando el video automáticamente."
                     })
                 else:
                     logger.error("❌ Pipeline no inicializado en el servidor.")
@@ -60,18 +66,19 @@ class PipelineHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"❌ Error procesando la solicitud: {e}")
                 self._respond(500, {"error": str(e)})
-        elif self.path == "/keep-alive":
-            self._respond(200, {"status": "alive"})
         else:
-            self._respond(404, {"error": "Ruta no encontrada. Use /trigger-video o /keep-alive"})
+            self._respond(404, {"error": "Ruta no encontrada. Use /trigger-video"})
 
     def _respond(self, status, data):
-        body = json.dumps(data).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self._send_cors_headers()
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            body = json.dumps(data).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self._send_cors_headers()
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Error enviando respuesta: {e}")
 
 def run_server(port=8080):
     # Importación tardía para evitar ciclos
@@ -83,8 +90,8 @@ def run_server(port=8080):
     server_address = ("0.0.0.0", port)
     httpd = HTTPServer(server_address, PipelineHandler)
     
-    logger.info(f"✅ Servidor receptor de tendencias listo en puerto {port}")
-    logger.info(f"Esperando información JSON en http://0.0.0.0:{port}/trigger-video")
+    logger.info(f"✅ Servidor receptor de peticiones listo en puerto {port}")
+    logger.info(f"Esperando peticiones POST en http://0.0.0.0:{port}/trigger-video")
     
     try:
         httpd.serve_forever()
