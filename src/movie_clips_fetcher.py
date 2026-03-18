@@ -3,6 +3,7 @@ import os
 import random
 import requests
 import subprocess
+import shutil
 from pathlib import Path
 from typing import Optional, List, Dict
 
@@ -29,45 +30,51 @@ class MovieClipsFetcher:
         tmdb_id = self._get_tmdb_id(movie_title)
         if not tmdb_id:
             logger.warning(f"No se encontró TMDB ID para '{movie_title}'")
-            return []
+            # Si no hay TMDB ID, intentamos buscar directamente en YouTube trailers
+            return self._fetch_youtube_trailers_fallback(movie_title, save_dir, clips_needed)
 
         # 2. Obtener videos de KinoCheck
         videos = self._get_kinocheck_videos(tmdb_id)
         logger.info(f"Se encontraron {len(videos)} videos en KinoCheck.")
-        if not videos:
-            logger.warning(f"No se encontraron videos en KinoCheck para TMDB ID {tmdb_id}")
-            return []
-
-        # 3. Descargar fragmentos cortos de los videos encontrados
+        
         downloaded_clips = []
         
-        # Priorizar clips sobre trailers si están disponibles
-        sorted_videos = sorted(videos, key=lambda v: 1 if "Clip" in v.get("categories", []) else 2)
-        
-        for i, video in enumerate(sorted_videos):
-            if len(downloaded_clips) >= clips_needed:
-                break
-                
-            yt_id = video.get("youtube_video_id")
-            if not yt_id:
-                continue
-                
-            output_path = save_dir / f"movie_clip_{i:03d}.mp4"
-            success = self._download_yt_fragment(yt_id, output_path)
+        if videos:
+            # Priorizar clips sobre trailers si están disponibles
+            sorted_videos = sorted(videos, key=lambda v: 1 if "Clip" in v.get("categories", []) else 2)
             
-            if success:
-                downloaded_clips.append({
-                    "path": str(output_path),
-                    "type": "video",
-                    "duration": 8, # Fragmento de 8s por defecto
-                    "keyword": movie_title,
-                    "source": "kinocheck_yt",
-                    "width": 1280,
-                    "height": 720
-                })
-                logger.info(f"✓ Clip descargado de YouTube: {output_path}")
-        
-        # 4. Fallback a GetYarn si no hay suficientes clips
+            for i, video in enumerate(sorted_videos):
+                if len(downloaded_clips) >= clips_needed:
+                    break
+                    
+                yt_id = video.get("youtube_video_id")
+                if not yt_id:
+                    continue
+                    
+                output_path = save_dir / f"movie_clip_{i:03d}.mp4"
+                # Duración de 7-9 segundos como se solicitó
+                duration = random.randint(7, 9)
+                success = self._download_yt_fragment(yt_id, output_path, duration=duration)
+                
+                if success:
+                    downloaded_clips.append({
+                        "path": str(output_path),
+                        "type": "video",
+                        "duration": duration,
+                        "keyword": movie_title,
+                        "source": "kinocheck_yt",
+                        "width": 1280,
+                        "height": 720
+                    })
+                    logger.info(f"✓ Clip descargado de YouTube (KinoCheck): {output_path}")
+
+        # 3. Si no hay suficientes clips de KinoCheck, buscar trailers directamente en YouTube
+        if len(downloaded_clips) < clips_needed:
+            logger.info(f"Buscando trailers adicionales directamente en YouTube para '{movie_title}'...")
+            yt_clips = self._fetch_youtube_trailers_fallback(movie_title, save_dir, clips_needed - len(downloaded_clips))
+            downloaded_clips.extend(yt_clips)
+            
+        # 4. Fallback a GetYarn si aún faltan clips
         if len(downloaded_clips) < clips_needed:
             logger.info(f"Buscando clips adicionales en GetYarn para '{movie_title}'...")
             yarn_clips = self._fetch_yarn_clips(movie_title, save_dir, clips_needed - len(downloaded_clips))
@@ -80,6 +87,45 @@ class MovieClipsFetcher:
             downloaded_clips.extend(pexels_clips)
 
         return downloaded_clips
+
+    def _fetch_youtube_trailers_fallback(self, movie_title: str, save_dir: Path, count: int) -> List[Dict]:
+        """Busca trailers en YouTube y descarga fragmentos."""
+        clips = []
+        try:
+            # Buscar trailers usando yt-dlp para obtener IDs
+            yt_dlp_path = shutil.which("yt-dlp") or "yt-dlp"
+            search_query = f"ytsearch{count+2}:{movie_title} official trailer"
+            cmd = [
+                yt_dlp_path,
+                "--get-id",
+                "--flat-playlist",
+                search_query
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                return []
+            
+            yt_ids = result.stdout.strip().split('\n')
+            for i, yt_id in enumerate(yt_ids):
+                if len(clips) >= count:
+                    break
+                
+                output_path = save_dir / f"yt_trailer_{i:03d}.mp4"
+                duration = random.randint(7, 9)
+                if self._download_yt_fragment(yt_id, output_path, duration=duration):
+                    clips.append({
+                        "path": str(output_path),
+                        "type": "video",
+                        "duration": duration,
+                        "keyword": movie_title,
+                        "source": "youtube_search",
+                        "width": 1280,
+                        "height": 720
+                    })
+                    logger.info(f"✓ Clip descargado de YouTube Search: {output_path}")
+        except Exception as e:
+            logger.error(f"Error en YouTube trailers fallback: {e}")
+        return clips
 
     def _fetch_pexels_fallback(self, keyword: str, save_dir: Path, count: int) -> List[Dict]:
         """Descarga clips de Pexels como último recurso."""
@@ -98,7 +144,6 @@ class MovieClipsFetcher:
                     video_files = v.get("video_files", [])
                     if not video_files: continue
                     
-                    # Tomar el archivo de video con mejor calidad pero no gigante
                     target = next((f for f in video_files if f.get("width", 0) <= 1920), video_files[0])
                     video_url = target.get("link")
                     filename = save_dir / f"pexels_fallback_{i:03d}.mp4"
@@ -111,7 +156,7 @@ class MovieClipsFetcher:
                     clips.append({
                         "path": str(filename),
                         "type": "video",
-                        "duration": v.get("duration", 5),
+                        "duration": v.get("duration", 10), # Clips de stock de ~10s
                         "keyword": keyword,
                         "source": "pexels_fallback",
                         "width": target.get("width", 1280),
@@ -130,13 +175,12 @@ class MovieClipsFetcher:
             if resp.status_code != 200: return []
             
             matches = re.findall(r'/yarn-clip/([a-f0-9\-]+)', resp.text)
-            unique_matches = list(dict.fromkeys(matches)) # Preservar orden y quitar duplicados
+            unique_matches = list(dict.fromkeys(matches))
             
             for i, clip_id in enumerate(unique_matches[:count]):
                 video_url = f"https://y.yarn.co/{clip_id}.mp4"
                 filename = save_dir / f"yarn_clip_{i:03d}.mp4"
                 
-                # Descarga simple
                 r = self.session.get(video_url, stream=True)
                 if r.status_code == 200:
                     with open(filename, 'wb') as f:
@@ -159,9 +203,11 @@ class MovieClipsFetcher:
 
     def _get_tmdb_id(self, title: str) -> Optional[int]:
         try:
+            # Limpiar el título para mejorar la búsqueda
+            clean_title = title.replace("_", " ").replace("-", " ")
             params = {
                 "api_key": self.tmdb_api_key,
-                "query": title,
+                "query": clean_title,
                 "language": "es-ES"
             }
             resp = self.session.get(self.tmdb_search_url, params=params, timeout=10)
@@ -175,14 +221,12 @@ class MovieClipsFetcher:
 
     def _get_kinocheck_videos(self, tmdb_id: int) -> List[Dict]:
         try:
-            # Intentar en inglés para más resultados
             url = f"{self.kinocheck_base}/movies?tmdb_id={tmdb_id}&language=en"
             resp = self.session.get(url, timeout=10)
             resp.raise_for_status()
             data = resp.json()
             
             videos = data.get("videos", [])
-            # También incluir el trailer principal si existe
             if data.get("trailer"):
                 videos.insert(0, data["trailer"])
                 
@@ -191,35 +235,40 @@ class MovieClipsFetcher:
             logger.error(f"Error obteniendo videos de KinoCheck: {e}")
         return []
 
-    def _download_yt_fragment(self, yt_id: str, output_path: Path) -> bool:
+    def _download_yt_fragment(self, yt_id: str, output_path: Path, duration: int = 8) -> bool:
         """
-        Descarga un fragmento de 8 segundos de un video de YouTube usando yt-dlp.
+        Descarga un fragmento de un video de YouTube usando yt-dlp.
         """
         try:
             yt_url = f"https://www.youtube.com/watch?v={yt_id}"
             
-            # Seleccionar un punto de inicio aleatorio entre el segundo 20 y 60 (evitar intros)
-            start_time = random.randint(20, 60)
+            # Seleccionar un punto de inicio aleatorio entre el segundo 30 y 120 (evitar intros)
+            # Para trailers, el contenido de acción suele estar más adelante
+            start_time = random.randint(30, 120)
             
             # Comando para descargar fragmento sin descargar todo el video
-            # Usamos ffmpeg a través de yt-dlp para descargar solo la parte necesaria
+            # Usamos calidad 720p como se solicitó
+            # Intentar encontrar la ruta de yt-dlp
+            yt_dlp_path = shutil.which("yt-dlp") or "yt-dlp"
+            
             cmd = [
-                "yt-dlp",
+                yt_dlp_path,
                 "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]",
                 "--external-downloader", "ffmpeg",
-                "--external-downloader-args", f"ffmpeg_i:-ss {start_time} -t 8",
+                "--external-downloader-args", f"ffmpeg_i:-ss {start_time} -t {duration}",
                 "--output", str(output_path),
                 yt_url
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
             
             if result.returncode == 0 and output_path.exists():
                 return True
             else:
-                logger.error(f"Error yt-dlp (Return code {result.returncode}): {result.stderr}")
-                logger.error(f"yt-dlp stdout: {result.stdout}")
-                return False
+                # Si falla con el start_time aleatorio, intentar desde el segundo 10
+                cmd[6] = f"ffmpeg_i:-ss 10 -t {duration}"
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+                return result.returncode == 0 and output_path.exists()
         except Exception as e:
             logger.error(f"Error descargando fragmento de YT: {e}")
             return False

@@ -10,7 +10,7 @@ Image.ANTIALIAS = Image.Resampling.LANCZOS
 
 from moviepy.editor import (
     VideoFileClip, ImageClip, AudioFileClip, concatenate_videoclips, 
-    CompositeVideoClip, TextClip, afx
+    CompositeVideoClip, TextClip, afx, vfx
 )
 
 logger = logging.getLogger(__name__)
@@ -24,11 +24,8 @@ class VideoEditor:
         tts_audio = AudioFileClip(audio_path)
         duration = tts_audio.duration
 
-        # Determinar si es Short basado en el format_type recibido o duración
-        # Si format_type contiene 'short', forzamos Short independientemente de la duración (aunque YouTube corta a 60s)
         is_short = "short" in format_type.lower() if format_type else (duration <= 60.0)
         
-        # Forzar resolución 9:16 para Shorts (1080x1920) y 16:9 para largos (1920x1080)
         target_h = 1920 if is_short else 1080
         target_w = 1080 if is_short else 1920
         
@@ -42,32 +39,39 @@ class VideoEditor:
             
             item_type = item.get("type")
             item_path = item.get("path")
+            source = item.get("source", "")
             
             try:
-                # Usar la duración estimada del segmento para el clip visual
                 clip_duration = item.get("segment_duration", 5)
 
                 if item_type == "video":
-                    # MEJORA: Cargar clip y asegurar que no intentamos leer frames inexistentes
                     raw_clip = VideoFileClip(item_path, audio=False)
                     
-                    # Si el video es más corto que lo que necesitamos, lo loopeamos
                     if raw_clip.duration < clip_duration:
                         clip = raw_clip.loop(duration=clip_duration)
                     else:
-                        # Si es más largo, tomamos un subclip seguro (evitando el último frame problemático)
                         safe_end = min(raw_clip.duration - 0.1, clip_duration)
                         clip = raw_clip.subclip(0, safe_end).set_duration(clip_duration)
+                    
+                    # MEJORA COPYRIGHT: Aplicar cambios sutiles a clips reales
+                    if "youtube" in source or "kinocheck" in source:
+                        # Espejo horizontal aleatorio
+                        if random.random() > 0.5:
+                            clip = clip.fx(vfx.mirror_x)
+                        
+                        # Zoom sutil (1.1x)
+                        clip = clip.fx(vfx.resize, 1.1)
                 else:
                     clip = ImageClip(item_path).set_duration(clip_duration)
+                    # Zoom dinámico para imágenes
+                    clip = clip.fx(vfx.resize, lambda t: 1 + 0.02*t)
                 
-                # Redimensionar y centrar/recortar en un solo paso para eficiencia
+                # Redimensionar y centrar/recortar
                 clip = clip.resize(height=target_h)
                 if clip.w > target_w:
                     x_center = clip.w / 2
                     clip = clip.crop(x1=x_center - target_w / 2, y1=0, x2=x_center + target_w / 2, y2=target_h)
                 elif clip.w < target_w:
-                    # Si es más estrecho, lo centramos con márgenes negros
                     diff = target_w - clip.w
                     left = diff // 2
                     right = diff - left 
@@ -81,23 +85,14 @@ class VideoEditor:
                 logger.warning(f"Error procesando clip {item_path}: {e}")
                 continue
             
-        # Concatenar y ajustar a la duración del audio
         if not clips:
             logger.error("No se pudieron cargar clips visuales.")
             raise Exception("No visual clips available")
 
-        # MEJORA: Asegurar que cubrimos toda la duración del audio
         visual_base = concatenate_videoclips(clips, method="chain")
+        visual_base = visual_base.set_duration(duration)
         
-        # Si los clips visuales no llegan a la duración del audio, repetimos el último o lo extendemos
-        if visual_base.duration < duration:
-            logger.warning(f"Material visual insuficiente ({visual_base.duration:.2f}s) para el audio ({duration:.2f}s). Ajustando...")
-            # Opción robusta: loop del último clip o estirar el final
-            visual_base = visual_base.set_duration(duration)
-        else:
-            visual_base = visual_base.set_duration(duration)
-        
-        # 3. Añadir Música de Fondo Aleatoria
+        # 3. Añadir Música de Fondo
         final_audio = tts_audio
         try:
             music_files = list(Path(music_dir).glob("*.mp3"))
@@ -106,25 +101,22 @@ class VideoEditor:
                 logger.info(f"Añadiendo música de fondo: {bg_music_path.name}")
                 bg_music = AudioFileClip(str(bg_music_path))
                 
-                # Ajustar volumen (ligeramente aumentado para que se escuche mejor sin opacar la voz)
                 bg_music = bg_music.volumex(0.15)
                 if bg_music.duration < duration:
                     bg_music = afx.audio_loop(bg_music, duration=duration)
                 else:
                     bg_music = bg_music.set_duration(duration)
                 
-                # Mezclar audios
                 from moviepy.audio.AudioClip import CompositeAudioClip
                 final_audio = CompositeAudioClip([tts_audio, bg_music])
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
-        # 4. Añadir Subtítulos Automáticos (MEJORA)
+        # 4. Añadir Subtítulos
         full_script = script_data.get('full_script', '')
         subtitles = []
         
         import re
-        # Dividir por puntos, comas o saltos de línea
         raw_sentences = re.split(r'[.,!?\n]', full_script)
         sentences = []
         for s in raw_sentences:
@@ -157,8 +149,7 @@ class VideoEditor:
                 except Exception as e:
                     logger.warning(f"No se pudo crear subtítulo para '{sentence[:20]}...': {e}")
 
-        # 5. Componer Video Final con Subtítulos
-        # MEJORA: Forzar tamaño del contenedor para evitar errores de MoviePy con clips de diferentes tamaños
+        # 5. Componer Video Final
         final_video = CompositeVideoClip([visual_base] + subtitles, size=(target_w, target_h)).set_audio(final_audio)
         final_video = final_video.set_duration(duration)
         
@@ -174,7 +165,6 @@ class VideoEditor:
             ffmpeg_params=["-crf", "28", "-tune", "stillimage"]
         )
         
-        # Limpieza
         final_video.close()
         visual_base.close()
         for c in clips:

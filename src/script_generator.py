@@ -23,7 +23,6 @@ class ScriptGenerator:
         user_prompt_ia = trend_data.get('prompt_ia')
         format_suggested = trend_data.get('formato_sugerido', 'Short').lower()
         
-        # Definir estilo base según el canal y categoría
         if "Criterio" in canal or "películas" in categoria:
             estilo_base = "serio, analítico, profesional y directo. Enfocado en la verdad y el análisis crítico."
             voz = "es-MX-JorgeNeural"
@@ -43,22 +42,19 @@ class ScriptGenerator:
             f"FORMATO: {format_suggested}\n"
             f"ESTILO REQUERIDO: {estilo_base}\n\n"
             "ESTRUCTURA OBLIGATORIA DEL CONTENIDO:\n"
-            "1. INICIO IMPACTANTE (HOOK): Una frase poderosa en los primeros 5 segundos que genere una curiosidad irresistible o rompa un patrón.\n"
-            "2. DESARROLLO INTERESANTE: Explicación clara con datos sorprendentes, ritmo ágil y sin rellenos. Usa frases cortas para mantener el dinamismo.\n"
-            "3. GIRO O MOMENTO LLAMATIVO: Introduce algo inesperado, un dato poco conocido o un cambio de ritmo que mantenga la atención alta a mitad del video.\n"
-            "4. CONCLUSIÓN PODEROSA: Un mensaje final claro, una reflexión impactante o un resumen que deje al espectador satisfecho.\n"
-            "5. LLAMADA A LA ACCIÓN (CTA): Invita de forma creativa a suscribirse o ver más contenido, integrada naturalmente en el cierre.\n\n"
+            "1. INICIO IMPACTANTE (HOOK): Una frase poderosa en los primeros 5 segundos.\n"
+            "2. DESARROLLO INTERESANTE: Explicación clara con datos sorprendentes.\n"
+            "3. GIRO O MOMENTO LLAMATIVO: Introduce algo inesperado.\n"
+            "4. CONCLUSIÓN PODEROSA: Un mensaje final claro.\n"
+            "5. LLAMADA A LA ACCIÓN (CTA): Invita a suscribirse.\n\n"
             "REQUISITOS TÉCNICOS:\n"
-            "- IDIOMA: Español natural, claro y directo.\n"
-            "- LIMPIEZA: No uses símbolos como (*, _, -, #) en el 'full_script'. Sin acotaciones de escena.\n"
-            "- KEYWORDS: 8-10 términos descriptivos en inglés para búsqueda de material visual.\n"
-            "- DURACIÓN: " + ("Máximo 55 segundos de locución (aprox 130-140 palabras)" if "short" in format_suggested else "Entre 3 y 5 minutos de locución (aprox 450-750 palabras)") + ".\n"
-            "- CAMPOS ADICIONALES: Debes incluir 'prompt_ia', 'estilo_contenido', 'hook' y 'estructura' en el JSON.\n\n"
-            "Responde ÚNICAMENTE con un objeto JSON que contenga las siguientes llaves:\n"
+            "- IDIOMA: Español natural.\n"
+            "- KEYWORDS: Para cada segmento, proporciona palabras clave en inglés que sean VISUALES y CONCRETAS (ej: 'man thinking', 'dark forest', 'explosion', 'crowded street'). EVITA conceptos abstractos como 'paradox', 'fate', 'destiny'.\n"
+            "- DURACIÓN: " + ("Máximo 55 segundos" if "short" in format_suggested else "Entre 3 y 5 minutos") + ".\n\n"
+            "Responde ÚNICAMENTE con un objeto JSON que contenga:\n"
             "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script'.\n"
             f"En 'voice' usa siempre: {voz}.\n\n"
-            "Para cada segmento del 'full_script', proporciona un 'segment_text', 'keywords' (3-5 términos en inglés) y 'estimated_duration' (en segundos, basándose en la longitud del texto y un ritmo de habla normal de 150 palabras por minuto). La suma de 'estimated_duration' debe ser aproximadamente la duración total del guion.\n\n"
-            "'segmented_script' debe ser una lista de objetos, cada uno con 'segment_text', 'keywords' and 'estimated_duration'."
+            "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales en inglés) y 'estimated_duration'."
         )
         
         max_retries = 3
@@ -67,7 +63,7 @@ class ScriptGenerator:
 
         for attempt in range(max_retries):
             try:
-                logger.info(f"Intento {attempt + 1}/{max_retries} de generación de guion (timeout: {timeout_seconds}s)...")
+                logger.info(f"Intento {attempt + 1}/{max_retries} de generación de guion...")
                 payload = {
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {"response_mime_type": "application/json"}
@@ -98,12 +94,8 @@ class ScriptGenerator:
                 
                 return data
                 
-            except requests.exceptions.Timeout:
-                logger.warning(f"Timeout en intento {attempt + 1}. Reintentando...")
-                time.sleep(retry_delay)
             except Exception as e:
                 logger.error(f"Error en intento {attempt + 1}: {e}")
                 time.sleep(retry_delay)
 
-        logger.error("Se agotaron los reintentos para generar el guion.")
         return None

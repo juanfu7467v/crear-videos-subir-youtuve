@@ -14,22 +14,17 @@ logger = logging.getLogger(__name__)
 def process_keywords(keywords_data):
     """
     Procesa las palabras clave asegurando que el resultado sea siempre una lista de strings.
-    Acepta tanto una lista de strings como una cadena separada por comas.
     """
     if not keywords_data:
         return []
     
     if isinstance(keywords_data, list):
-        # Si ya es una lista, nos aseguramos de que todos los elementos sean strings y no estén vacíos
         return [str(kw).strip() for kw in keywords_data if str(kw).strip()]
     
     if isinstance(keywords_data, str):
-        # Si es un string, lo dividimos por comas o ", "
-        # Reemplazamos ", " por "," para normalizar
         normalized = keywords_data.replace(", ", ",")
         return [kw.strip() for kw in normalized.split(",") if kw.strip()]
     
-    # Para cualquier otro tipo, intentamos convertir a string y procesar, o devolvemos lista vacía
     try:
         str_data = str(keywords_data)
         normalized = str_data.replace(", ", ",")
@@ -68,58 +63,64 @@ class MediaFetcher:
         format_label = "Short" if is_short else "Largo"
         logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({format_label}) basado en el script segmentado.")
         
+        # Obtener clips reales de la película si la categoría es películas
+        movie_clips = []
+        if categoria and "películas" in categoria.lower():
+            # Intentar obtener el título de la película del video_id o del primer segmento
+            movie_title = video_id
+            if segmented_script and segmented_script[0].get("segment_text"):
+                # Intentar extraer un título más limpio del texto del primer segmento
+                first_text = segmented_script[0].get("segment_text", "")
+                # Si el texto es largo, tomamos las primeras palabras o usamos el video_id
+                movie_title = " ".join(first_text.split()[:3])
+            
+            # Pedimos la mitad de los clips como reales para alternar
+            movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
+            logger.info(f"Se obtuvieron {len(movie_clips)} clips reales de la película.")
+
         for i, segment in enumerate(segmented_script):
             segment_keywords = process_keywords(segment.get("keywords", ""))
             segment_duration = segment.get("estimated_duration", 5)
-            segment_text = segment.get("segment_text", "")
-
-            if not segment_keywords or segment_keywords == ['']:
-                logger.warning(f"Segmento {i+1} sin palabras clave. Saltando.")
-                continue
             
-            kw = random.choice(segment_keywords)
-            logger.info(f"Buscando media para segmento {i+1} (duración {segment_duration}s) con palabra clave: {kw}")
+            # Alternar entre clip real y clip de stock/AI
+            # Estructura: Clip A (Real), Clip B (Stock), Clip C (Real), Clip D (Stock)...
+            media_item = None
+            orientation = "portrait" if is_short else "landscape"
 
-            try:
-                media_item = None
-                orientation = "portrait" if is_short else "landscape"
-
-                if categoria and "películas" in categoria.lower():
-                    movie_title = segment_text.split(" ")[0] if segment_text else video_id
-                    movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, 1)
-                    if movie_clips:
-                        media_item = movie_clips[0]
-                        logger.info(f"✓ Se obtuvo clip real de película para segmento {i+1}.")
-
-                if not media_item:
-                    if prefer_video and self.pexels_key:
-                        media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}", orientation)
-                    
-                    if not media_item and self.pixabay_key:
-                        media_item = self._fetch_pixabay_video(kw, save_dir, f"clip_{i:03d}")
+            # Intentar usar un clip real si toca y hay disponibles
+            if i % 2 == 0 and movie_clips:
+                media_item = movie_clips.pop(0)
+                logger.info(f"Segmento {i+1}: Usando clip real de película.")
+            
+            # Si no hay clip real o toca stock, buscar en Pexels/Pixabay
+            if not media_item:
+                if not segment_keywords or segment_keywords == ['']:
+                    kw = "cinematic"
+                else:
+                    kw = random.choice(segment_keywords)
+                
+                logger.info(f"Segmento {i+1}: Buscando clip de stock para '{kw}'")
+                
+                if prefer_video and self.pexels_key:
+                    media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}", orientation)
+                
+                if not media_item and self.pixabay_key:
+                    media_item = self._fetch_pixabay_video(kw, save_dir, f"clip_{i:03d}")
                 
                 if not media_item:
                     media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:03d}", is_short)
 
-                if not media_item and self.pexels_key:
-                    media_item = self._fetch_pexels_image(kw, save_dir, f"img_{i:03d}", orientation)
+            if media_item:
+                media_item["segment_duration"] = segment_duration
+                media_list.append(media_item)
+                logger.debug(f"  [{i+1}/{total_clips_needed}] ✓ {media_item.get('keyword', 'N/A')}: {media_item['path']}")
 
-                if media_item:
-                    media_item["segment_duration"] = segment_duration
-                    media_list.append(media_item)
-                    media_path = media_item['path']
-                    logger.debug(f"  [{i+1}/{total_clips_needed}] ✓ {kw}: {media_path}")
-
-                time.sleep(0.2)
-
-            except Exception as e:
-                logger.warning(f"Error descargando media para '{kw}' en segmento {i+1}: {e}")
-                continue
+            time.sleep(0.1)
 
         if not media_list:
             logger.warning("No se pudo descargar ningún media. Generando imágenes AI de fallback...")
             for i, segment in enumerate(segmented_script[:5]):
-                kw_fallback = random.choice(process_keywords(segment.get("keywords", "fallback")))
+                kw_fallback = "cinematic movie scene"
                 item = self._fetch_pollinations_image(kw_fallback, save_dir, f"fallback_{i}", is_short)
                 if item:
                     item["segment_duration"] = segment.get("estimated_duration", 5)
@@ -150,7 +151,7 @@ class MediaFetcher:
             video_url = target["link"]
             filename = save_dir / f"{prefix}_pexels.mp4"
             if self._download_file(video_url, str(filename)):
-                return {"path": str(filename), "type": "video", "duration": video.get("duration", 8), "keyword": keyword, "source": "pexels", "width": target.get("width", 1280), "height": target.get("height", 720)}
+                return {"path": str(filename), "type": "video", "duration": video.get("duration", 10), "keyword": keyword, "source": "pexels", "width": target.get("width", 1280), "height": target.get("height", 720)}
             return None
         except Exception as e:
             logger.debug(f"Pexels video error para '{keyword}': {e}")
@@ -195,7 +196,7 @@ class MediaFetcher:
             if not vid or not vid.get("url"): return None
             filename = save_dir / f"{prefix}_pixabay.mp4"
             if self._download_file(vid["url"], str(filename)):
-                return {"path": str(filename), "type": "video", "duration": hit.get("duration", 8), "keyword": keyword, "source": "pixabay", "width": vid.get("width", 1280), "height": vid.get("height", 720)}
+                return {"path": str(filename), "type": "video", "duration": hit.get("duration", 10), "keyword": keyword, "source": "pixabay", "width": vid.get("width", 1280), "height": vid.get("height", 720)}
             return None
         except Exception as e:
             logger.debug(f"Pixabay video error para '{keyword}': {e}")
@@ -215,11 +216,8 @@ class MediaFetcher:
             return None
 
     def _validate_video(self, path: str) -> bool:
-        """
-        Valida que el video no esté corrupto usando ffprobe.
-        """
         if not path.endswith(('.mp4', '.mov', '.avi')):
-            return True # Asumimos que imágenes son válidas si pasaron el check de tamaño
+            return True
             
         try:
             cmd = [
@@ -231,24 +229,17 @@ class MediaFetcher:
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
-                logger.warning(f"ffprobe detectó error en {path}: {result.stderr}")
                 return False
             
             duration = float(result.stdout.strip())
             if duration <= 0:
-                logger.warning(f"Video con duración cero detectado: {path}")
                 return False
                 
             return True
         except Exception as e:
-            logger.warning(f"Error validando video {path} con ffprobe: {e}")
             return False
 
     def _download_file(self, url: str, path: str) -> bool:
-        """
-        Descarga un archivo y valida que no esté vacío o corrupto.
-        Retorna True si la descarga fue exitosa y válida.
-        """
         try:
             resp = self.session.get(url, stream=True, timeout=30)
             resp.raise_for_status()
@@ -258,22 +249,17 @@ class MediaFetcher:
                     if chunk:
                         f.write(chunk)
             
-            # 1. Validación básica: tamaño de archivo
             file_size = os.path.getsize(path)
-            if file_size < 1024:  # Menos de 1KB es sospechoso
-                logger.warning(f"Archivo descargado demasiado pequeño ({file_size} bytes): {path}")
+            if file_size < 1024:
                 if os.path.exists(path): os.remove(path)
                 return False
             
-            # 2. Validación avanzada para videos: ffprobe
             if not self._validate_video(path):
-                logger.warning(f"Video corrupto detectado por ffprobe: {path}")
                 if os.path.exists(path): os.remove(path)
                 return False
                 
             return True
         except Exception as e:
-            logger.error(f"Error descargando {url}: {e}")
             if os.path.exists(path):
                 os.remove(path)
             return False
