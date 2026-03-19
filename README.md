@@ -1,49 +1,39 @@
-# Sistema Automático de Videos (Receptor)
+# 🎬 Auto Video System - Peliprex Edition
 
-Este sistema crea y sube videos a YouTube automáticamente al recibir una señal JSON de un sistema externo de análisis de tendencias.
+Sistema automatizado para la creación de videos (Shorts y largos) utilizando la API de **Peliprex** como fuente principal de contenido cinematográfico.
 
-## 🚀 Funcionamiento
-El sistema actúa como un servidor pasivo que espera una petición POST con los datos del video a crear. Una vez recibida la información, inicia automáticamente el proceso de generación de guion, audio, descarga de clips, edición y subida a YouTube.
+## 🚀 Mejoras Recientes
 
-### Endpoint Receptor
-* **URL:** `https://tu-app-en-fly.fly.dev/trigger-video`
-* **Método:** `POST`
-* **Formato JSON esperado:**
-```json
-{
-  "tema_recomendado": "Misterios del océano profundo descubiertos recientemente",
-  "titulo": "Los secretos del océano que los científicos acaban de descubrir",
-  "idea_contenido": "Un video que muestra descubrimientos recientes en el océano profundo, criaturas extrañas, lugares nunca explorados y datos sorprendentes que están cambiando lo que sabemos sobre el planeta.",
-  "formato_sugerido": "Short",
-  "hora_optima_publicacion": "19:30"
-}
-```
+- **Eliminación de YouTube v3 & yt-dlp**: Se ha eliminado completamente la dependencia de la API de búsqueda de YouTube y la herramienta de descarga `yt-dlp` para evitar fallos de descarga y bloqueos.
+- **Integración con Peliprex API**: Nueva lógica de búsqueda y descarga de clips utilizando la API interna de Peliprex.
+- **Descarga Optimizada**: Implementación de descargas parciales mediante `ffmpeg` (HTTP Range Requests), permitiendo extraer fragmentos de menos de 7 segundos directamente desde el stream original.
+- **Eficiencia de Recursos**: Optimizado para un uso máximo de 2 GB de RAM y ahorro significativo de ancho de banda.
 
 ## 🛠️ Configuración (Fly.io)
 
-### Variables de Entorno (Secrets)
-Configura solo las siguientes variables en Fly.io:
+El sistema utiliza las siguientes variables de entorno:
 
 | Variable | Descripción |
 |----------|-------------|
-| `GEMINI_API_KEY` | API Key de Google Gemini (para guiones y QC) |
-| `PEXELS_API_KEY` | API Key de Pexels (para clips de video) |
-| `PIXABAY_API_KEY` | API Key de Pixabay (para clips de video) |
-| `CHANNEL_NAME` | Nombre de tu canal de YouTube |
+| `GEMINI_API_KEY` | Para la generación de guiones y control de calidad. |
+| `PEXELS_API_KEY` | Fallback para clips de stock. |
+| `PIXABAY_API_KEY`| Fallback secundario para clips de stock. |
+| `YOUTUBE_OAUTH2_DATA` | JSON con credenciales OAuth2 para la subida final a YouTube. |
 
+## ⚙️ Funcionamiento
 
-### Simplificación del Sistema
-Se han eliminado las siguientes variables y archivos para simplificar el sistema:
-* **Eliminado:** `API_SECRET_KEY`, `RUN_MODE`, `SCHEDULE_TIMES`, `YOUTUBE_CREDENTIALS_FILE`.
-* **Eliminado:** Módulo de análisis de tendencias interno (ahora es pasivo).
-* **Eliminado:** Módulo de programación interna (ahora depende del trigger externo).
+1. **Trigger**: El sistema recibe un POST en `/trigger-video`.
+2. **Búsqueda**: Utiliza `https://peliprex-31wrsa.fly.dev/search?q={termino}` para encontrar la película.
+3. **Descarga**: Extrae fragmentos aleatorios de la película (puntos de inicio variados, duración < 7s) usando `ffmpeg`.
+4. **Edición**: Ensambla el video con audio TTS, música de fondo y subtítulos.
+5. **Upload**: Sube el resultado final a YouTube.
 
 ## 📦 Despliegue
 
 1. Clona el repositorio.
 2. Configura tus secretos en Fly.io:
    ```bash
-   fly secrets set GEMINI_API_KEY=tu_key PEXELS_API_KEY=tu_key PIXABAY_API_KEY=tu_key CHANNEL_NAME="Tu Canal"
+   fly secrets set GEMINI_API_KEY=tu_key PEXELS_API_KEY=tu_key PIXABAY_API_KEY=tu_key YOUTUBE_OAUTH2_DATA='{"token": "...", "refresh_token": "...", ...}'
    ```
 3. Asegúrate de tener el volumen para persistencia de datos (logs y tokens):
    ```bash
@@ -54,7 +44,5 @@ Se han eliminado las siguientes variables y archivos para simplificar el sistema
    fly deploy
    ```
 
-## 📝 Notas
-* El sistema utiliza **Edge-TTS** para la generación de voz gratuita y de alta calidad.
-* La edición se realiza mediante **MoviePy**.
-* Las imágenes de apoyo se generan automáticamente vía **Pollinations.ai** si no se encuentran clips de video adecuados.
+---
+*Desarrollado para la automatización eficiente de contenido cinematográfico.*

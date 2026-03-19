@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 import requests
 from src.movie_clips_fetcher import MovieClipsFetcher
-from src.youtube_downloader import YouTubeDownloader
+from src.peliprex_downloader import PeliprexDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +41,9 @@ class MediaFetcher:
     def __init__(self, pexels_key: str, pixabay_key: str, youtube_key: str = None):
         self.pexels_key  = pexels_key
         self.pixabay_key = pixabay_key
-        self.youtube_key = youtube_key or os.getenv("YOUTUBE_API_KEY")
+        # Eliminamos la dependencia de YouTube API key
         self.movie_clips_fetcher = MovieClipsFetcher()
-        self.youtube_downloader = YouTubeDownloader(api_key=self.youtube_key)
+        self.peliprex_downloader = PeliprexDownloader()
         self.session     = requests.Session()
         self.session.headers.update({"User-Agent": "ElTioJota-AutoVideo/1.0"})
 
@@ -66,24 +66,24 @@ class MediaFetcher:
         format_label = "Short" if is_short else "Largo"
         logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({format_label}) basado en el script segmentado.")
         
-        # Obtener clips reales de la película (trailers)
+        # Obtener clips reales de la película usando Peliprex
         movie_clips = []
-        # Si no hay categoría explícita, intentamos deducir si es sobre una película por el video_id
-        # o simplemente usamos la nueva lógica de trailers para mayor calidad visual
         movie_title = video_id
         if segmented_script and segmented_script[0].get("segment_text"):
             first_text = segmented_script[0].get("segment_text", "")
+            # Intentar extraer el título de la película de los primeros segmentos
             movie_title = " ".join(first_text.split()[:3])
         
-        # Intentar obtener trailers de YouTube (Paso A y B de la solución)
-        logger.info(f"Intentando obtener trailers de YouTube para: {movie_title}")
-        movie_clips = self.youtube_downloader.fetch_trailer_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
+        # Intentar obtener clips de Peliprex (Nueva fuente principal)
+        logger.info(f"Intentando obtener clips de Peliprex para: {movie_title}")
+        movie_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
         
+        # Si no hay clips de Peliprex y es de películas, usar MovieClipsFetcher como fallback (sin YouTube)
         if not movie_clips and categoria and "películas" in categoria.lower():
-            # Fallback al fetcher original si YouTube falla y es explícitamente de películas
+            logger.info(f"Fallback a MovieClipsFetcher para: {movie_title}")
             movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
         
-        logger.info(f"Se obtuvieron {len(movie_clips)} clips de trailer/película para alternar.")
+        logger.info(f"Se obtuvieron {len(movie_clips)} clips reales para alternar.")
         
         # Guardar copia de clips de película para reutilizar si faltan
         original_movie_clips = movie_clips.copy()
@@ -100,11 +100,11 @@ class MediaFetcher:
             if i % 2 == 0:
                 if movie_clips:
                     media_item = movie_clips.pop(0)
-                    logger.info(f"Segmento {i+1}: Usando clip real de película.")
+                    logger.info(f"Segmento {i+1}: Usando clip real.")
                 elif original_movie_clips:
                     # Si se acabaron pero teníamos, reutilizar uno aleatorio
                     media_item = random.choice(original_movie_clips).copy()
-                    logger.info(f"Segmento {i+1}: Reutilizando clip real de película (loop).")
+                    logger.info(f"Segmento {i+1}: Reutilizando clip real (loop).")
             
             # Si no hay clip real o toca stock, buscar en Pexels/Pixabay
             if not media_item:
