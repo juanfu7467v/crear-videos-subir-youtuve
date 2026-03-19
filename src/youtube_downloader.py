@@ -50,69 +50,52 @@ class YouTubeDownloader:
             data = resp.json()
             
             video_ids = [item["id"]["videoId"] for item in data.get("items", [])]
-            logger.info(f"Encontrados {len(video_ids)} trailers potenciales para '{movie_title}'")
+            logger.info(f"Encontrados {len(video_ids)} trailers potenciales para \'{movie_title}\'")
             return video_ids
         except Exception as e:
             logger.error(f"Error buscando en YouTube API: {e}")
             return []
-
-    def _generate_cookies_from_oauth(self, oauth_data: dict) -> str:
-        """
-        Genera un contenido de archivo de cookies Netscape compatible con yt-dlp 
-        a partir del access_token de OAuth2.
-        """
-        token = oauth_data.get('token')
-        if not token:
-            return ""
-            
-        # Formato Netscape: domain, inclusion, path, secure, expiry, name, value
-        # Usamos youtube.com y el token como cookie de sesión o similar.
-        # Nota: yt-dlp puede usar el token directamente en headers, pero via CLI
-        # lo más robusto es simular la sesión.
-        lines = [
-            "# Netscape HTTP Cookie File",
-            f".youtube.com\tTRUE\t/\tTRUE\t{int(time.time() + 3600)}\tGPS\t1",
-            f".youtube.com\tTRUE\t/\tTRUE\t{int(time.time() + 3600)}\tYSC\t{token}"
-        ]
-        return "\n".join(lines)
 
     def download_fragment(self, video_id: str, save_path: Path, start_time: int, duration: int) -> bool:
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
         yt_dlp_path = shutil.which("yt-dlp") or "yt-dlp"
         user_agent = random.choice(self.user_agents)
         
+        # Construcción del comando yt-dlp con las mejoras sugeridas
         cmd = [
             yt_dlp_path,
-            "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]",
+            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]", # Forzar MP4
             "--user-agent", user_agent,
             "--no-check-certificate",
             "--geo-bypass",
-            "--extractor-args", "youtube:player_client=android,web",
+            "--extractor-args", "youtube:player_client=web", # Forzar cliente web
             "--external-downloader", "ffmpeg",
             "--external-downloader-args", f"ffmpeg_i:-ss {start_time} -t {duration}",
             "--output", str(save_path),
             yt_url
         ]
         
-        temp_oauth_cookies = Path("temp_oauth_cookies.txt")
+        # Archivo temporal para las credenciales OAuth2
+        # yt-dlp puede usar un archivo .netrc para la autenticación de YouTube con refresh_token
+        netrc_file_path = Path("youtube_netrc")
+        
         try:
-            # PRIORIDAD 1: OAuth2 desde secreto (Refrescado automáticamente)
             oauth2_data = get_valid_oauth2_data()
-            if oauth2_data:
-                logger.info("Usando YOUTUBE_OAUTH2_DATA para autenticación en la descarga.")
-                # Escribimos el token en un archivo temporal para que yt-dlp lo use.
-                # Como yt-dlp no tiene una opción directa para pasar el access_token por parámetro simple,
-                # lo pasamos como header personalizado.
-                token = oauth2_data.get('token')
-                if token:
-                    cmd.extend(["--add-header", f"Authorization: Bearer {token}"])
-                
-            # PRIORIDAD 2: Cookies locales
+            if oauth2_data and oauth2_data.get('refresh_token'):
+                logger.info("Usando YOUTUBE_OAUTH2_DATA (refresh_token) para autenticación en la descarga.")
+                # Crear un archivo .netrc temporal con el refresh_token
+                # yt-dlp buscará 'youtube' en el .netrc para el refresh_token
+                netrc_content = f"machine youtube\n  login {oauth2_data['client_id']}\n  password {oauth2_data['client_secret']}\n  account {oauth2_data['refresh_token']}\n"
+                netrc_file_path.write_text(netrc_content)
+                # Añadir la opción --netrc-location a yt-dlp para que use el archivo temporal
+                cmd.extend(["--netrc-location", str(netrc_file_path)])
+                # También podemos añadir --username oauth2 si el plugin está instalado, pero --netrc-location es más genérico.
+                # cmd.extend(["--username", "oauth2"])
+            
             elif self.cookies_path.exists():
                 logger.info(f"Usando cookies de YouTube desde: {self.cookies_path}")
                 cmd.extend(["--cookies", str(self.cookies_path)])
                 
-            # PRIORIDAD 3: Cookies desde variable de entorno
             else:
                 env_cookies = os.getenv("YOUTUBE_COOKIES_CONTENT")
                 if env_cookies:
@@ -142,9 +125,9 @@ class YouTubeDownloader:
             logger.error(f"Excepción en download_fragment para {video_id}: {e}")
             return False
         finally:
-            # Limpieza
-            if temp_oauth_cookies.exists():
-                try: temp_oauth_cookies.unlink()
+            # Limpieza de archivos temporales
+            if netrc_file_path.exists():
+                try: netrc_file_path.unlink()
                 except: pass
             if Path("temp_cookies.txt").exists():
                 try: Path("temp_cookies.txt").unlink()
@@ -155,7 +138,7 @@ class YouTubeDownloader:
         video_ids = self.search_trailer(search_query, count=3)
         
         if not video_ids:
-            logger.warning(f"No se encontraron videos para '{search_query}'")
+            logger.warning(f"No se encontraron videos para \'{search_query}\'")
             return []
 
         downloaded_clips = []
