@@ -5,15 +5,18 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     TZ=America/Mexico_City
 
-# Instalar dependencias del sistema incluyendo ImageMagick para los subtítulos
+# Instalar dependencias del sistema incluyendo ImageMagick y Node.js para yt-dlp
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     fonts-liberation \
     fontconfig \
     ca-certificates \
     wget \
+    curl \
     tzdata \
     imagemagick \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
     && fc-cache -fv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

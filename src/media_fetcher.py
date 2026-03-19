@@ -84,20 +84,27 @@ class MediaFetcher:
             movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
         
         logger.info(f"Se obtuvieron {len(movie_clips)} clips de trailer/película para alternar.")
+        
+        # Guardar copia de clips de película para reutilizar si faltan
+        original_movie_clips = movie_clips.copy()
 
         for i, segment in enumerate(segmented_script):
             segment_keywords = process_keywords(segment.get("keywords", ""))
             segment_duration = segment.get("estimated_duration", 5)
             
             # Alternar entre clip real y clip de stock/AI
-            # Estructura: Clip A (Real), Clip B (Stock), Clip C (Real), Clip D (Stock)...
             media_item = None
             orientation = "portrait" if is_short else "landscape"
 
-            # Intentar usar un clip real si toca y hay disponibles
-            if i % 2 == 0 and movie_clips:
-                media_item = movie_clips.pop(0)
-                logger.info(f"Segmento {i+1}: Usando clip real de película.")
+            # Intentar usar un clip real si toca
+            if i % 2 == 0:
+                if movie_clips:
+                    media_item = movie_clips.pop(0)
+                    logger.info(f"Segmento {i+1}: Usando clip real de película.")
+                elif original_movie_clips:
+                    # Si se acabaron pero teníamos, reutilizar uno aleatorio
+                    media_item = random.choice(original_movie_clips).copy()
+                    logger.info(f"Segmento {i+1}: Reutilizando clip real de película (loop).")
             
             # Si no hay clip real o toca stock, buscar en Pexels/Pixabay
             if not media_item:

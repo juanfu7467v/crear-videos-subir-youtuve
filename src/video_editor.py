@@ -112,6 +112,21 @@ class VideoEditor:
             logger.error("No se pudieron cargar clips visuales válidos.")
             raise Exception("No visual clips available")
 
+        # MEJORA: Asegurar que los clips cubran toda la duración del audio
+        # Si la suma de duraciones de clips es menor que la duración del audio, repetirlos
+        total_clips_duration = sum(c.duration for c in clips)
+        if total_clips_duration < duration:
+            logger.info(f"Clips insuficientes ({total_clips_duration:.2f}s < {duration:.2f}s). Repitiendo clips...")
+            # Repetir la lista de clips hasta cubrir la duración necesaria
+            original_clips = clips.copy()
+            while total_clips_duration < duration:
+                for c in original_clips:
+                    new_c = c.copy().set_start(total_clips_duration)
+                    clips.append(new_c)
+                    total_clips_duration += c.duration
+                    if total_clips_duration >= duration:
+                        break
+
         visual_base = concatenate_videoclips(clips, method="chain")
         visual_base = visual_base.set_duration(duration)
         
