@@ -36,6 +36,9 @@ RUN sed -i 's/policy domain="path" rights="none" pattern="@\*"/policy domain="pa
 
 # Establecer variable de entorno para que MoviePy encuentre ImageMagick
 ENV IMAGEMAGICK_BINARY=/usr/bin/convert
+# Configurar Node.js como motor JS para yt-dlp
+ENV YTDLP_JS_RUNTIME=node
+ENV PATH="/usr/bin/node:${PATH}"
 
 WORKDIR /app
 

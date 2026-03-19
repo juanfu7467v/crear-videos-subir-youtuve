@@ -70,13 +70,14 @@ class YouTubeDownloader:
             
             user_agent = random.choice(self.user_agents)
             
-            # Comando base con optimizaciones anti-bot
+            # Comando base con optimizaciones anti-bot y motor JS forzado
             cmd = [
                 yt_dlp_path,
                 "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]",
                 "--user-agent", user_agent,
                 "--no-check-certificate",
                 "--geo-bypass",
+                "--extractor-args", "youtube:player_client=android,web",
                 "--external-downloader", "ffmpeg",
                 "--external-downloader-args", f"ffmpeg_i:-ss {start_time} -t {duration}",
                 "--output", str(save_path),
