@@ -15,18 +15,20 @@ logger = logging.getLogger(__name__)
 class YouTubeDownloader:
     """
     Busca trailers oficiales en YouTube usando la API de Data v3 y descarga fragmentos específicos.
-    Implementa medidas anti-bot: User-Agents reales y soporte para cookies/OAuth2.
+    Implementa medidas anti-bot: User-Agents reales, rotación de clientes y soporte para OAuth2.
     """
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("YOUTUBE_API_KEY")
         self.base_url = "https://www.googleapis.com/youtube/v3/search"
         self.session = requests.Session()
         
+        # User-Agents modernos y variados para simular navegadores reales
         self.user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edge/121.0.0.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
         ]
         
         self.cookies_path = Path("credentials/youtube_cookies.txt")
@@ -50,7 +52,7 @@ class YouTubeDownloader:
             data = resp.json()
             
             video_ids = [item["id"]["videoId"] for item in data.get("items", [])]
-            logger.info(f"Encontrados {len(video_ids)} trailers potenciales para \'{movie_title}\'")
+            logger.info(f"Encontrados {len(video_ids)} trailers potenciales para '{movie_title}'")
             return video_ids
         except Exception as e:
             logger.error(f"Error buscando en YouTube API: {e}")
@@ -59,98 +61,95 @@ class YouTubeDownloader:
     def download_fragment(self, video_id: str, save_path: Path, start_time: int, duration: int) -> bool:
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
         yt_dlp_path = shutil.which("yt-dlp") or "yt-dlp"
-        user_agent = random.choice(self.user_agents)
         
-        # Construcción del comando yt-dlp con las mejoras sugeridas
-        cmd = [
-            yt_dlp_path,
-            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]", # Forzar MP4
-            "--user-agent", user_agent,
-            "--no-check-certificate",
-            "--geo-bypass",
-            "--extractor-args", "youtube:player_client=web", # Forzar cliente web
-            "--external-downloader", "ffmpeg",
-            "--external-downloader-args", f"ffmpeg_i:-ss {start_time} -t {duration}",
-            "--output", str(save_path),
-            yt_url
-        ]
+        # Clientes de YouTube para rotar en caso de bloqueo
+        # ios y mweb suelen ser más permisivos con IPs de centros de datos
+        clients = ["ios", "mweb", "web", "android"]
         
-        # Archivo temporal para las credenciales OAuth2
-        # yt-dlp puede usar un archivo .netrc para la autenticación de YouTube con refresh_token
+        # Archivo temporal para las credenciales OAuth2 (.netrc)
         netrc_file_path = Path("youtube_netrc")
+        oauth2_data = get_valid_oauth2_data()
         
-        try:
-            oauth2_data = get_valid_oauth2_data()
-            if oauth2_data and oauth2_data.get('refresh_token'):
-                logger.info("Usando YOUTUBE_OAUTH2_DATA (refresh_token) para autenticación en la descarga.")
-                # Crear un archivo .netrc temporal con el refresh_token
-                # yt-dlp buscará 'youtube' en el .netrc para el refresh_token
-                netrc_content = f"machine youtube\n  login {oauth2_data['client_id']}\n  password {oauth2_data['client_secret']}\n  account {oauth2_data['refresh_token']}\n"
-                netrc_file_path.write_text(netrc_content)
-                # Añadir la opción --netrc-location a yt-dlp para que use el archivo temporal
-                cmd.extend(["--netrc-location", str(netrc_file_path)])
-                # También podemos añadir --username oauth2 si el plugin está instalado, pero --netrc-location es más genérico.
-                # cmd.extend(["--username", "oauth2"])
-            
-            elif self.cookies_path.exists():
-                logger.info(f"Usando cookies de YouTube desde: {self.cookies_path}")
-                cmd.extend(["--cookies", str(self.cookies_path)])
-                
-            else:
-                env_cookies = os.getenv("YOUTUBE_COOKIES_CONTENT")
-                if env_cookies:
-                    temp_cookies = Path("temp_cookies.txt")
-                    temp_cookies.write_text(env_cookies)
-                    cmd.extend(["--cookies", str(temp_cookies)])
-                    logger.info("Usando cookies desde variable de entorno.")
+        if oauth2_data and oauth2_data.get('refresh_token'):
+            netrc_content = (
+                f"machine youtube\n"
+                f"  login {oauth2_data['client_id']}\n"
+                f"  password {oauth2_data['client_secret']}\n"
+                f"  account {oauth2_data['refresh_token']}\n"
+            )
+            netrc_file_path.write_text(netrc_content)
 
-            logger.info(f"Iniciando descarga de fragmento: {video_id} (Inicio: {start_time}s, Duración: {duration}s)")
+        max_retries = 3
+        for attempt in range(max_retries):
+            user_agent = random.choice(self.user_agents)
+            client = clients[attempt % len(clients)]
             
-            max_retries = 2
-            for attempt in range(max_retries):
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            cmd = [
+                yt_dlp_path,
+                "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
+                "--user-agent", user_agent,
+                "--no-check-certificate",
+                "--geo-bypass",
+                "--extractor-args", f"youtube:player_client={client}",
+                "--external-downloader", "ffmpeg",
+                "--external-downloader-args", f"ffmpeg_i:-ss {start_time} -t {duration}",
+                "--output", str(save_path),
+                "--quiet", "--no-warnings",
+                yt_url
+            ]
+
+            if netrc_file_path.exists():
+                cmd.extend(["--netrc-location", str(netrc_file_path)])
+            elif self.cookies_path.exists():
+                cmd.extend(["--cookies", str(self.cookies_path)])
+
+            logger.info(f"Intento {attempt + 1}/{max_retries}: Descargando {video_id} con cliente '{client}'")
+            
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
                 
                 if result.returncode == 0 and save_path.exists() and save_path.stat().st_size > 1024:
                     logger.info(f"Descarga exitosa: {save_path.name}")
                     return True
                 
                 error_msg = result.stderr if result.stderr else result.stdout
-                logger.warning(f"Intento {attempt + 1} fallido para {video_id}. Error: {error_msg[:500]}")
+                logger.warning(f"Fallo en intento {attempt + 1} para {video_id}: {error_msg[:200]}...")
                 
-                time.sleep(2)
-                cmd[cmd.index("--user-agent") + 1] = random.choice(self.user_agents)
+                # Pausa exponencial entre reintentos para evitar detección
+                time.sleep(2 * (attempt + 1))
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Timeout en intento {attempt + 1} para {video_id}")
+            except Exception as e:
+                logger.error(f"Error inesperado en download_fragment: {e}")
+
+        # Limpieza final
+        if netrc_file_path.exists():
+            try: netrc_file_path.unlink()
+            except: pass
             
-            return False
-        except Exception as e:
-            logger.error(f"Excepción en download_fragment para {video_id}: {e}")
-            return False
-        finally:
-            # Limpieza de archivos temporales
-            if netrc_file_path.exists():
-                try: netrc_file_path.unlink()
-                except: pass
-            if Path("temp_cookies.txt").exists():
-                try: Path("temp_cookies.txt").unlink()
-                except: pass
+        return False
 
     def fetch_trailer_clips(self, movie_title: str, save_dir: Path, clips_needed: int = 3) -> List[Dict]:
         search_query = movie_title.split(".")[0].replace("_", " ").replace("-", " ")
-        video_ids = self.search_trailer(search_query, count=3)
+        video_ids = self.search_trailer(search_query, count=5) # Buscamos más para tener opciones
         
         if not video_ids:
-            logger.warning(f"No se encontraron videos para \'{search_query}\'")
+            logger.warning(f"No se encontraron videos para '{search_query}'")
             return []
 
         downloaded_clips = []
-        suggested_starts = [15, 60, 100, 30, 140]
+        suggested_starts = [15, 60, 100, 30, 140, 45, 80]
         
-        for i in range(clips_needed):
-            video_id = video_ids[i % len(video_ids)]
-            base_start = suggested_starts[i % len(suggested_starts)]
+        # Barajamos los videos para no descargar siempre los mismos
+        random.shuffle(video_ids)
+        
+        for i in range(min(len(video_ids), clips_needed * 2)): # Intentamos con el doble de lo necesario
+            video_id = video_ids[i]
+            base_start = random.choice(suggested_starts)
             actual_start = max(5, base_start + random.randint(-5, 15))
             duration = random.randint(6, 10)
             
-            output_path = save_dir / f"yt_trailer_{i:03d}.mp4"
+            output_path = save_dir / f"yt_trailer_{len(downloaded_clips):03d}.mp4"
             
             if self.download_fragment(video_id, output_path, actual_start, duration):
                 downloaded_clips.append({
@@ -162,7 +161,7 @@ class YouTubeDownloader:
                     "width": 1280,
                     "height": 720
                 })
-                time.sleep(1)
+                time.sleep(1.5) # Pausa entre videos
             
             if len(downloaded_clips) >= clips_needed:
                 break
