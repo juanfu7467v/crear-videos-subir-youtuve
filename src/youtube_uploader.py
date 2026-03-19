@@ -4,8 +4,8 @@ import os
 import time
 from pathlib import Path
 from typing import Optional
+from src.oauth2_utils import get_valid_oauth2_data
 
-# Tratamos de importar las librerías de Google
 try:
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
@@ -16,16 +16,13 @@ except ImportError:
     YOUTUBE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 class YouTubeUploader:
-    # ACEPTAMOS EL ARGUMENTO PARA QUE MAIN.PY NO SE QUEJE
     def __init__(self):
         self.youtube = None
         self._initialized = False
         self._current_channel = None
         
-        # Mapeo de nombres de canales a variables de entorno
         self.channel_map = {
             "EL TÍO JOTA": "YOUTUBE_CREDENTIALS_FILE",
             "EL CRITERIO": "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
@@ -33,17 +30,37 @@ class YouTubeUploader:
 
     def _load_credentials_from_secrets(self, channel_name: str):
         """Carga credenciales desde el secreto de Fly."""
-        # Normalizar el nombre del canal para la búsqueda en el mapa
-        normalized_name = channel_name.strip().upper()
+        # PRIORIDAD 1: Usar el nuevo secreto YOUTUBE_OAUTH2_DATA unificado
+        oauth2_data = get_valid_oauth2_data()
+        if oauth2_data:
+            logger.info("Usando el nuevo secreto YOUTUBE_OAUTH2_DATA unificado para la subida.")
+            try:
+                # El formato de YOUTUBE_OAUTH2_DATA ya es compatible con Credentials
+                # pero debemos asegurar que los campos requeridos por Credentials.from_authorized_user_info existan
+                creds_info = {
+                    "token": oauth2_data['token'],
+                    "refresh_token": oauth2_data['refresh_token'],
+                    "token_uri": oauth2_data['token_uri'],
+                    "client_id": oauth2_data['client_id'],
+                    "client_secret": oauth2_data['client_secret'],
+                    "scopes": oauth2_data.get('scopes', ["https://www.googleapis.com/auth/youtube.upload"])
+                }
+                creds = Credentials.from_authorized_user_info(creds_info)
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                return creds
+            except Exception as e:
+                logger.error(f"Error procesando el nuevo secreto unificado: {e}")
+                # Fallback a los secretos individuales si falla el unificado
         
-        # Intentar obtener la variable del mapa, si no, usar la lógica anterior como fallback
+        # PRIORIDAD 2: Usar los secretos individuales por canal (Legacy)
+        normalized_name = channel_name.strip().upper()
         creds_env_var = self.channel_map.get(normalized_name)
         
         if not creds_env_var:
-            # Fallback: si no está en el mapa, intentar construir el nombre de la variable
             creds_env_var = f"YOUTUBE_CREDENTIALS_FILE_{normalized_name.replace(' ', '_')}" if channel_name != "CHANNEL_NAME" else "YOUTUBE_CREDENTIALS_FILE"
         
-        logger.info(f"Intentando cargar credenciales desde la variable: {creds_env_var} para el canal: {channel_name}")
+        logger.info(f"Cargando credenciales legacy desde: {creds_env_var}")
         creds_json = os.getenv(creds_env_var)
         
         if not creds_json:
@@ -52,21 +69,22 @@ class YouTubeUploader:
 
         try:
             data = json.loads(creds_json)
-            creds = Credentials.from_authorized_user_info(data, SCOPES)
+            # Asegurar que SCOPES esté definido para Credentials
+            scopes = data.get('scopes', ["https://www.googleapis.com/auth/youtube.upload"])
+            creds = Credentials.from_authorized_user_info(data, scopes)
             
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             return creds
         except Exception as e:
-            logger.error(f"Error procesando credenciales: {e}")
+            logger.error(f"Error procesando credenciales legacy: {e}")
             return None
 
     def _initialize(self, channel_name: str) -> bool:
-        # Reinicializar si el canal es diferente
         if self._initialized and self._current_channel == channel_name: return True
         
         self._current_channel = channel_name
-        self._initialized = False # Forzar reinicialización si el canal cambia
+        self._initialized = False 
         creds = self._load_credentials_from_secrets(channel_name)
         if creds:
             self.youtube = build("youtube", "v3", credentials=creds)
@@ -75,16 +93,14 @@ class YouTubeUploader:
         return False
 
     def upload(self, video_path: str, title: str, description: str = "", channel_name: str = "CHANNEL_NAME", **kwargs) -> str:
-        # Intentamos inicializar. Si no hay creds, se va por el fallback.
         if not self._initialize(channel_name):
             logger.warning("No se pudo inicializar YouTube (Subida simulada).")
             return "https://youtu.be/SIMULADO"
 
         try:
-            # MEJORA: Configuración avanzada de subida
             is_kids = kwargs.get('is_kids', False)
             tags = kwargs.get('tags', [])
-            category_id = kwargs.get('category_id', '22') # 22: People & Blogs, 1: Film & Animation
+            category_id = kwargs.get('category_id', '22')
             
             body = {
                 "snippet": {
@@ -114,7 +130,6 @@ class YouTubeUploader:
             
             video_id = response.get('id')
             
-            # Subir miniatura si existe
             thumbnail_path = kwargs.get('thumbnail_path')
             if video_id and thumbnail_path and os.path.exists(thumbnail_path):
                 try:
