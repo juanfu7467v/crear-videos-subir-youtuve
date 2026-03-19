@@ -77,10 +77,11 @@ class YouTubeDownloader:
         try:
             oauth2_data = os.getenv("YOUTUBE_OAUTH2_DATA")
             if oauth2_data:
-                oauth_file_path = Path("youtube_oauth2_data.json")
+                oauth_file_path = Path("client_secrets.json")
                 oauth_file_path.write_text(oauth2_data)
-                cmd.extend(["--username", "oauth2", "--oauth-setup-args", f"client_secrets_file={oauth_file_path}"])
-                logger.info("Usando YOUTUBE_OAUTH2_DATA para autenticación.")
+                cmd.extend(["--username", "oauth2"])
+                logger.info("Usando YOUTUBE_OAUTH2_DATA para autenticación. yt-dlp buscará 'client_secrets.json' automáticamente.")
+                
             elif self.cookies_path.exists():
                 logger.info(f"Usando cookies de YouTube desde: {self.cookies_path}")
                 cmd.extend(["--cookies", str(self.cookies_path)])
