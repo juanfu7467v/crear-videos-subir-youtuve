@@ -43,8 +43,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Crear directorios necesarios
-RUN mkdir -p assets/music assets/fonts output logs temp/audio temp/video temp/images credentials src
+    # Crear directorios necesarios
+RUN mkdir -p assets/music assets/fonts output logs temp/audio temp/video temp/images credentials src && chmod -R 777 credentials
 
 COPY . .
 
