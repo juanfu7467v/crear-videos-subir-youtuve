@@ -73,11 +73,14 @@ class MediaFetcher:
         
         # Obtener clips reales de la película usando Peliprex
         movie_clips = []
-        movie_title = video_id
+        
+        # MEJORA: Extracción limpia del título de la película
+        raw_title = video_id
         if segmented_script and segmented_script[0].get("segment_text"):
-            first_text = segmented_script[0].get("segment_text", "")
-            # Intentar extraer el título de la película de los primeros segmentos
-            movie_title = " ".join(first_text.split()[:3])
+            raw_title = segmented_script[0].get("segment_text", "")
+        
+        # Usar la nueva lógica de limpieza para obtener solo el nombre de la película
+        movie_title = self.peliprex_downloader.clean_movie_title(raw_title)
         
         # Intentar obtener clips de Peliprex (Nueva fuente principal)
         logger.info(f"Intentando obtener clips de Peliprex para: {movie_title}")
