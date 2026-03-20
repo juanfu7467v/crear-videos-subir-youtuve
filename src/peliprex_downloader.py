@@ -27,7 +27,8 @@ class PeliprexDownloader:
         try:
             params = {"q": movie_title}
             headers = {"User-Agent": random.choice(self.user_agents)}
-            resp = self.session.get(self.base_url, params=params, headers=headers, timeout=15)
+            # El usuario solicitó explícitamente esperar hasta recibir respuesta sin tiempo límite fijo (timeout=None).
+            resp = self.session.get(self.base_url, params=params, headers=headers, timeout=None)
             resp.raise_for_status()
             data = resp.json()
             
@@ -44,43 +45,29 @@ class PeliprexDownloader:
         # Formatear tiempo para ffmpeg (HH:MM:SS)
         start_str = time.strftime('%H:%M:%S', time.gmtime(start_time))
         
-        # Intentar primero con copy (rápido, bajo CPU/RAM)
-        # Usamos -ss antes de -i para descarga parcial real (Input Seeking)
-        cmd = [
+        # El usuario reportó que el modo 'copy' falla a menudo.
+        # Intentaremos recodificar directamente para asegurar compatibilidad y evitar fallos intermedios,
+        # o mantener el fallback pero asegurar que la recodificación sea el estándar si hay problemas.
+        
+        logger.info(f"Descargando fragmento de {duration}s desde {start_str} con recodificación para asegurar compatibilidad...")
+        
+        # Usamos recodificación directamente como sugiere el error del usuario para evitar el fallo de 'copy'
+        cmd_recode = [
             'ffmpeg', '-y',
             '-ss', start_str,
             '-t', str(duration),
             '-i', video_url,
-            '-c', 'copy',
-            '-map', '0:v:0',
-            '-map', '0:a:0',
-            '-avoid_negative_ts', 'make_zero',
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-pix_fmt', 'yuv420p', # Asegurar formato de píxeles compatible
+            '-movflags', '+faststart',
+            '-maxrate', '2M', '-bufsize', '2M',
             str(save_path)
         ]
-
-        logger.info(f"Descargando fragmento de {duration}s desde {start_str}...")
         
         try:
-            # Ejecutar con timeout para evitar bloqueos
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-            
-            if result.returncode == 0 and save_path.exists() and save_path.stat().st_size > 10240:
-                logger.info(f"Fragmento guardado exitosamente: {save_path.name}")
-                return True
-            
-            # Si falla el 'copy', intentar recodificando (más robusto pero usa más recursos)
-            logger.warning(f"Fallo 'copy', reintentando con recodificación para {save_path.name}...")
-            cmd_recode = [
-                'ffmpeg', '-y',
-                '-ss', start_str,
-                '-t', str(duration),
-                '-i', video_url,
-                '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-                '-c:a', 'aac', '-b:a', '128k',
-                '-maxrate', '2M', '-bufsize', '2M', # Limitar bitrate para RAM/ancho de banda
-                str(save_path)
-            ]
-            result = subprocess.run(cmd_recode, capture_output=True, text=True, timeout=180)
+            # Aumentar timeout de descarga ya que la recodificación y red pueden ser lentas
+            result = subprocess.run(cmd_recode, capture_output=True, text=True, timeout=300)
             
             if result.returncode == 0 and save_path.exists() and save_path.stat().st_size > 10240:
                 logger.info(f"Fragmento recodificado exitosamente: {save_path.name}")
