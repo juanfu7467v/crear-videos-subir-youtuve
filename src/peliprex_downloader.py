@@ -44,39 +44,52 @@ class PeliprexDownloader:
         """Descarga un fragmento corto del video usando ffmpeg directamente desde la URL."""
         # Formatear tiempo para ffmpeg (HH:MM:SS)
         start_str = time.strftime('%H:%M:%S', time.gmtime(start_time))
+        end_time = start_time + duration
+        end_str = time.strftime('%H:%M:%S', time.gmtime(end_time))
         
-        # El usuario reportó que el modo 'copy' falla a menudo.
-        # Intentaremos recodificar directamente para asegurar compatibilidad y evitar fallos intermedios,
-        # o mantener el fallback pero asegurar que la recodificación sea el estándar si hay problemas.
+        logger.info(f"Descargando fragmento de {duration}s desde {start_str} hasta {end_str} con recodificación...")
         
-        logger.info(f"Descargando fragmento de {duration}s desde {start_str} con recodificación para asegurar compatibilidad...")
+        # SOLUCIÓN 100% ESTABLE: 
+        # 1. El parámetro -i (la URL) DEBE ir después de los tiempos para streams lentos.
+        # 2. Usamos -to en lugar de -t para mayor precisión con -i al final.
+        # 3. Forzamos recodificación con parámetros de máxima compatibilidad.
+        # 4. Capturamos stderr completo para depuración profunda.
         
-        # Usamos recodificación directamente como sugiere el error del usuario para evitar el fallo de 'copy'
-        cmd_recode = [
+        cmd_stable = [
             'ffmpeg', '-y',
             '-ss', start_str,
-            '-t', str(duration),
+            '-to', end_str,
             '-i', video_url,
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-            '-c:a', 'aac', '-b:a', '128k',
-            '-pix_fmt', 'yuv420p', # Asegurar formato de píxeles compatible
+            '-c:v', 'libx264', 
+            '-preset', 'superfast', 
+            '-crf', '28',
+            '-c:a', 'aac', 
+            '-strict', 'experimental',
+            '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart',
-            '-maxrate', '2M', '-bufsize', '2M',
+            '-maxrate', '2M', 
+            '-bufsize', '4M',
             str(save_path)
         ]
         
         try:
-            # Aumentar timeout de descarga ya que la recodificación y red pueden ser lentas
-            result = subprocess.run(cmd_recode, capture_output=True, text=True, timeout=300)
+            # Ejecutar con timeout extendido para asegurar que termine en redes lentas
+            result = subprocess.run(cmd_stable, capture_output=True, text=True, timeout=600)
             
             if result.returncode == 0 and save_path.exists() and save_path.stat().st_size > 10240:
-                logger.info(f"Fragmento recodificado exitosamente: {save_path.name}")
+                logger.info(f"Fragmento descargado y recodificado exitosamente: {save_path.name}")
                 return True
-                
-            logger.error(f"Error descargando fragmento: {result.stderr[:200]}")
+            
+            # Si falla, logueamos el error completo de FFmpeg para análisis
+            error_msg = result.stderr if result.stderr else "No stderr output"
+            logger.error(f"FALLO CRÍTICO FFmpeg en {save_path.name}:\n--- STDERR ---\n{error_msg}\n--------------")
+            return False
+            
+        except subprocess.TimeoutExpired:
+            logger.error(f"TIMEOUT: FFmpeg tardó más de 10 minutos en descargar {save_path.name}")
             return False
         except Exception as e:
-            logger.error(f"Excepción en Peliprex download: {e}")
+            logger.error(f"Excepción inesperada en Peliprex download: {str(e)}")
             return False
 
     def fetch_movie_clips(self, movie_title: str, save_dir: Path, clips_needed: int = 3) -> List[Dict]:

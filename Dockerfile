@@ -5,9 +5,11 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     TZ=America/Mexico_City
 
-# Instalar dependencias del sistema incluyendo ImageMagick
+# Instalar dependencias del sistema incluyendo ImageMagick y codecs de video
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    libx264-dev \
+    libavcodec-extra \
     fonts-liberation \
     fontconfig \
     ca-certificates \
