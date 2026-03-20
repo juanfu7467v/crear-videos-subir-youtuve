@@ -4,6 +4,7 @@ import random
 import subprocess
 import requests
 import time
+import re
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -27,8 +28,8 @@ class PeliprexDownloader:
         try:
             params = {"q": movie_title}
             headers = {"User-Agent": random.choice(self.user_agents)}
-            # El usuario solicitó explícitamente esperar hasta recibir respuesta sin tiempo límite fijo (timeout=None).
-            resp = self.session.get(self.base_url, params=params, headers=headers, timeout=None)
+            logger.info(f"Consultando API Peliprex: {self.base_url}?q={movie_title}")
+            resp = self.session.get(self.base_url, params=params, headers=headers, timeout=30)
             resp.raise_for_status()
             data = resp.json()
             
@@ -42,7 +43,6 @@ class PeliprexDownloader:
 
     def download_fragment(self, video_url: str, save_path: Path, start_time: int, duration: int) -> bool:
         """Descarga un fragmento corto del video usando ffmpeg directamente desde la URL."""
-        # Prohibición de YouTube: No procesar si es un enlace de Google/YouTube
         if "youtube.com" in video_url or "youtu.be" in video_url or "googlevideo.com" in video_url:
             logger.warning(f"Omitiendo enlace de YouTube detectado: {video_url}")
             return False
@@ -52,12 +52,7 @@ class PeliprexDownloader:
         end_time = start_time + duration
         end_str = time.strftime('%H:%M:%S', time.gmtime(end_time))
         
-        logger.info(f"Descargando fragmento de {duration}s desde {start_str} hasta {end_str} con recodificación...")
-        
-        # SOLUCIÓN 100% ESTABLE Y DIRECTA DESDE PELIPREX:
-        # 1. El parámetro -i (la URL) DEBE ir después de los tiempos para streams lentos.
-        # 2. Usamos -to en lugar de -t para mayor precisión con -i al final.
-        # 3. Recodificación directa para máxima compatibilidad.
+        logger.info(f"Descargando fragmento de {duration}s desde {start_str} hasta {end_str}...")
         
         cmd_stable = [
             'ffmpeg', '-y',
@@ -77,77 +72,85 @@ class PeliprexDownloader:
         ]
         
         try:
-            # Ejecutar con timeout extendido para asegurar que termine en redes lentas
             result = subprocess.run(cmd_stable, capture_output=True, text=True, timeout=600)
             
             if result.returncode == 0 and save_path.exists() and save_path.stat().st_size > 10240:
-                logger.info(f"Fragmento descargado y recodificado exitosamente: {save_path.name}")
+                logger.info(f"Fragmento descargado exitosamente: {save_path.name}")
                 return True
             
-            # Si falla, logueamos el error completo de FFmpeg para análisis
             error_msg = result.stderr if result.stderr else "No stderr output"
-            logger.error(f"FALLO CRÍTICO FFmpeg en {save_path.name}:\n--- STDERR ---\n{error_msg}\n--------------")
+            logger.error(f"FALLO FFmpeg en {save_path.name}: {error_msg}")
             return False
             
         except subprocess.TimeoutExpired:
-            logger.error(f"TIMEOUT: FFmpeg tardó más de 10 minutos en descargar {save_path.name}")
+            logger.error(f"TIMEOUT: FFmpeg tardó demasiado en descargar {save_path.name}")
             return False
         except Exception as e:
             logger.error(f"Excepción inesperada en Peliprex download: {str(e)}")
             return False
 
+    def _normalize_text(self, text: str) -> str:
+        """Normaliza el texto para comparaciones (minúsculas, sin caracteres especiales)."""
+        text = text.lower()
+        # Reemplazar guiones por espacios para separar palabras (ej: spider-man -> spider man)
+        text = text.replace("-", " ")
+        text = re.sub(r'[^a-z0-9\s]', '', text)
+        return text.strip()
+
     def fetch_movie_clips(self, movie_title: str, save_dir: Path, clips_needed: int = 3) -> List[Dict]:
-        """Busca y descarga varios clips cortos de una película en Peliprex."""
+        """Busca y descarga varios clips cortos de una película en Peliprex con filtrado inteligente."""
+        # Limpiar el título de búsqueda
         search_query = movie_title.split(".")[0].replace("_", " ").replace("-", " ")
+        normalized_query = self._normalize_text(search_query)
+        
         results = self.search_movie(search_query)
         
         if not results:
             logger.warning(f"No se encontraron resultados en Peliprex para '{search_query}'")
             return []
 
-        # MEJORA 1: Filtrado Estricto por Título
-        # Implementar una validación de similitud para evitar clips de películas erróneas.
+        # Filtrado de títulos que coinciden con lo buscado
         filtered_results = []
         for res in results:
-            res_title = res.get('titulo', '').lower()
-            if search_query.lower() in res_title or any(word in res_title for word in search_query.lower().split()):
+            res_title = res.get('titulo', '')
+            normalized_res_title = self._normalize_text(res_title)
+            
+            # Coincidencia si el título normalizado contiene la consulta o viceversa
+            if normalized_query in normalized_res_title or normalized_res_title in normalized_query:
                 filtered_results.append(res)
-        
-        # Si el filtrado estricto no devuelve nada, intentamos con los primeros 3 resultados originales como fallback
-        # pero priorizamos la coincidencia exacta si existe.
-        if not filtered_results:
-            logger.warning(f"No hay coincidencias exactas para '{search_query}', probando resultados generales.")
-            target_results = results[:3]
-        else:
-            logger.info(f"Filtrado estricto: {len(filtered_results)} coincidencias para '{search_query}'")
-            target_results = filtered_results[:3]
+                logger.info(f"Coincidencia encontrada: '{res_title}'")
+            else:
+                # Si no hay coincidencia directa, ver si comparten palabras clave importantes
+                query_words = set(normalized_query.split())
+                title_words = set(normalized_res_title.split())
+                common_words = query_words.intersection(title_words)
+                # Si comparten más del 50% de las palabras de la consulta, lo aceptamos
+                if len(common_words) >= len(query_words) * 0.5:
+                    filtered_results.append(res)
+                    logger.info(f"Coincidencia parcial aceptada: '{res_title}'")
 
-        downloaded_clips = []
+        if not filtered_results:
+            logger.warning(f"No se encontraron coincidencias satisfactorias para '{search_query}'.")
+            return []
+
+        logger.info(f"Total de películas coincidentes: {len(filtered_results)}")
         
-        # MEJORA 2: Evitar el "Inicio en Negro" (Offset de Tiempo)
-        # No extraer desde el segundo 0. Configurar un punto de inicio entre el minuto 10 y el 60.
-        # 10 min = 600s, 60 min = 3600s
-        suggested_starts = [600, 1200, 1800, 2400, 3000, 3600]
+        downloaded_clips = []
+        # Puntos de inicio sugeridos (evitando el inicio en negro)
+        suggested_starts = [600, 1200, 1800, 2400, 3000, 3600, 4200, 4800]
         random.shuffle(suggested_starts)
 
         for i in range(clips_needed):
-            # Rotar entre los mejores resultados
-            result = target_results[i % len(target_results)]
-            
-            # Priorizar direct_link o stream_url según lo solicitado por el usuario
-            video_url = result.get("direct_link") or result.get("stream_url") or result.get("pelicula_url")
+            # Rotar entre los resultados coincidentes
+            result = filtered_results[i % len(filtered_results)]
+            video_url = result.get("pelicula_url") or result.get("direct_link") or result.get("stream_url")
             
             if not video_url:
                 continue
             
-            # Limpieza de YouTube: Si la API devuelve YouTube como sugerencia, descartar
-            if "youtube.com" in video_url or "youtu.be" in video_url:
-                logger.info(f"Omitiendo sugerencia de YouTube de Peliprex: {video_url}")
-                continue
-
             # Usar offset de tiempo (mínimo 10 minutos)
             start_time = suggested_starts[i % len(suggested_starts)] + random.randint(0, 300)
-            duration = 7 # MEJORA 3: Clips de Peliprex de máximo 7 segundos según Ritmo 7-10-7
+            duration = 7 # Ritmo 7-10-7
             
             output_path = save_dir / f"peliprex_{len(downloaded_clips):03d}.mp4"
             
@@ -158,6 +161,7 @@ class PeliprexDownloader:
                     "duration": float(duration),
                     "keyword": movie_title,
                     "source": "peliprex",
+                    "title": result.get("titulo", "Unknown"),
                     "width": 1280,
                     "height": 720
                 })
