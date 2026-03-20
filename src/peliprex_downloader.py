@@ -16,7 +16,6 @@ class PeliprexDownloader:
     """
     def __init__(self):
         self.base_url = "https://peliprex-31wrsa.fly.dev/search"
-        self.api_key = os.getenv("PELIPREX_API_KEY", "")
         self.session = requests.Session()
         self.user_agents = [
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -56,20 +55,12 @@ class PeliprexDownloader:
         logger.info(f"Descargando fragmento de {duration}s desde {start_str} hasta {end_str} con recodificación...")
         
         # SOLUCIÓN 100% ESTABLE Y DIRECTA DESDE PELIPREX:
-        # 1. Pasamos Headers de autenticación directamente en el comando FFmpeg.
-        # 2. El parámetro -i (la URL) DEBE ir después de los tiempos para streams lentos.
-        # 3. Usamos -to en lugar de -t para mayor precisión con -i al final.
+        # 1. El parámetro -i (la URL) DEBE ir después de los tiempos para streams lentos.
+        # 2. Usamos -to en lugar de -t para mayor precisión con -i al final.
+        # 3. Recodificación directa para máxima compatibilidad.
         
-        headers_str = f"Authorization: {self.api_key}" if self.api_key else ""
-        
-        # Construir comando FFmpeg dinámicamente
-        cmd_stable = ['ffmpeg', '-y']
-        
-        # Los headers deben ir antes del input (-i)
-        if headers_str:
-            cmd_stable.extend(['-headers', f"{headers_str}\r\n"]) # \r\n es requerido por FFmpeg para headers
-            
-        cmd_stable.extend([
+        cmd_stable = [
+            'ffmpeg', '-y',
             '-ss', start_str,
             '-to', end_str,
             '-i', video_url,
@@ -83,7 +74,7 @@ class PeliprexDownloader:
             '-maxrate', '2M', 
             '-bufsize', '4M',
             str(save_path)
-        ])
+        ]
         
         try:
             # Ejecutar con timeout extendido para asegurar que termine en redes lentas
