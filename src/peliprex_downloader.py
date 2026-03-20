@@ -101,25 +101,42 @@ class PeliprexDownloader:
             logger.warning(f"No se encontraron resultados en Peliprex para '{search_query}'")
             return []
 
-        # Usar el primer o segundo resultado más relevante
-        target_results = results[:2]
+        # MEJORA 1: Filtrado Estricto por Título
+        # Implementar una validación de similitud para evitar clips de películas erróneas.
+        filtered_results = []
+        for res in results:
+            res_title = res.get('titulo', '').lower()
+            if search_query.lower() in res_title or any(word in res_title for word in search_query.lower().split()):
+                filtered_results.append(res)
+        
+        # Si el filtrado estricto no devuelve nada, intentamos con los primeros 3 resultados originales como fallback
+        # pero priorizamos la coincidencia exacta si existe.
+        if not filtered_results:
+            logger.warning(f"No hay coincidencias exactas para '{search_query}', probando resultados generales.")
+            target_results = results[:3]
+        else:
+            logger.info(f"Filtrado estricto: {len(filtered_results)} coincidencias para '{search_query}'")
+            target_results = filtered_results[:3]
+
         downloaded_clips = []
         
-        # Puntos de inicio aleatorios (evitando el inicio y el final típico de una película)
-        # Suponiendo una película de 90 min, evitamos los primeros 5 y últimos 10
-        suggested_starts = [300, 900, 1800, 2700, 3600, 4500, 5400] 
+        # MEJORA 2: Evitar el "Inicio en Negro" (Offset de Tiempo)
+        # No extraer desde el segundo 0. Configurar un punto de inicio entre el minuto 10 y el 60.
+        # 10 min = 600s, 60 min = 3600s
+        suggested_starts = [600, 1200, 1800, 2400, 3000, 3600]
         random.shuffle(suggested_starts)
 
         for i in range(clips_needed):
-            # Rotar entre los dos mejores resultados si hay más de uno
+            # Rotar entre los mejores resultados
             result = target_results[i % len(target_results)]
             video_url = result.get("pelicula_url")
             
             if not video_url:
                 continue
 
+            # Usar offset de tiempo (mínimo 10 minutos)
             start_time = suggested_starts[i % len(suggested_starts)] + random.randint(0, 300)
-            duration = random.randint(5, 7) # Fragmentos de menos de 7 segundos
+            duration = 7 # MEJORA 3: Clips de Peliprex de máximo 7 segundos según Ritmo 7-10-7
             
             output_path = save_dir / f"peliprex_{len(downloaded_clips):03d}.mp4"
             

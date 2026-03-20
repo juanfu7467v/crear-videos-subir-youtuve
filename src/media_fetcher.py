@@ -61,10 +61,15 @@ class MediaFetcher:
         save_dir.mkdir(parents=True, exist_ok=True)
 
         media_list = []
-        total_clips_needed = len(segmented_script)
-
+        
+        # MEJORA 3: Ritmo 7-10-7
+        # Calculamos cuántos pares de clips (Peliprex 7s + Stock 10s) necesitamos para cubrir la duración.
+        # Un ciclo completo dura 17 segundos.
+        total_cycle_duration = 17 
+        cycles_needed = (target_duration // total_cycle_duration) + 1
+        
         format_label = "Short" if is_short else "Largo"
-        logger.info(f"Buscando {total_clips_needed} clips para {target_duration}s de video ({format_label}) basado en el script segmentado.")
+        logger.info(f"Buscando clips para {target_duration}s de video ({format_label}) con ritmo 7-10-7.")
         
         # Obtener clips reales de la película usando Peliprex
         movie_clips = []
@@ -76,71 +81,79 @@ class MediaFetcher:
         
         # Intentar obtener clips de Peliprex (Nueva fuente principal)
         logger.info(f"Intentando obtener clips de Peliprex para: {movie_title}")
-        movie_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
+        # Pedimos suficientes clips para cubrir los ciclos
+        movie_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, cycles_needed)
         
         # Si no hay clips de Peliprex y es de películas, usar MovieClipsFetcher como fallback (sin YouTube)
         if not movie_clips and categoria and "películas" in categoria.lower():
             logger.info(f"Fallback a MovieClipsFetcher para: {movie_title}")
-            movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, total_clips_needed // 2 + 1)
+            movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, cycles_needed)
         
         logger.info(f"Se obtuvieron {len(movie_clips)} clips reales para alternar.")
         
         # Guardar copia de clips de película para reutilizar si faltan
         original_movie_clips = movie_clips.copy()
 
-        for i, segment in enumerate(segmented_script):
-            segment_keywords = process_keywords(segment.get("keywords", ""))
-            segment_duration = segment.get("estimated_duration", 5)
-            
-            # Alternar entre clip real y clip de stock/AI
+        # Recopilar todas las palabras clave del script para usarlas en los clips de stock
+        all_keywords = []
+        for segment in segmented_script:
+            all_keywords.extend(process_keywords(segment.get("keywords", "")))
+        if not all_keywords: all_keywords = ["cinematic"]
+
+        current_total_duration = 0
+        clip_index = 0
+        
+        while current_total_duration < target_duration:
+            # 1. Clip Peliprex (7 segundos)
             media_item = None
-            orientation = "portrait" if is_short else "landscape"
-
-            # Intentar usar un clip real si toca
-            if i % 2 == 0:
-                if movie_clips:
-                    media_item = movie_clips.pop(0)
-                    logger.info(f"Segmento {i+1}: Usando clip real.")
-                elif original_movie_clips:
-                    # Si se acabaron pero teníamos, reutilizar uno aleatorio
-                    media_item = random.choice(original_movie_clips).copy()
-                    logger.info(f"Segmento {i+1}: Reutilizando clip real (loop).")
+            if movie_clips:
+                media_item = movie_clips.pop(0)
+                logger.info(f"Ritmo 7-10-7: Usando clip real (7s).")
+            elif original_movie_clips:
+                media_item = random.choice(original_movie_clips).copy()
+                logger.info(f"Ritmo 7-10-7: Reutilizando clip real (7s).")
             
-            # Si no hay clip real o toca stock, buscar en Pexels/Pixabay
-            if not media_item:
-                if not segment_keywords or segment_keywords == ['']:
-                    kw = "cinematic"
-                else:
-                    kw = random.choice(segment_keywords)
-                
-                logger.info(f"Segmento {i+1}: Buscando clip de stock para '{kw}'")
-                
-                if prefer_video and self.pexels_key:
-                    media_item = self._fetch_pexels_video(kw, save_dir, f"clip_{i:03d}", orientation)
-                
-                if not media_item and self.pixabay_key:
-                    media_item = self._fetch_pixabay_video(kw, save_dir, f"clip_{i:03d}")
-                
-                if not media_item:
-                    media_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:03d}", is_short)
-
             if media_item:
-                media_item["segment_duration"] = segment_duration
+                media_item["segment_duration"] = 7.0
                 media_list.append(media_item)
-                logger.debug(f"  [{i+1}/{total_clips_needed}] ✓ {media_item.get('keyword', 'N/A')}: {media_item['path']}")
+                current_total_duration += 7.0
+            
+            if current_total_duration >= target_duration: break
 
+            # 2. Clip Stock (10 segundos)
+            kw = random.choice(all_keywords)
+            orientation = "portrait" if is_short else "landscape"
+            logger.info(f"Ritmo 7-10-7: Buscando clip de stock para '{kw}' (10s)")
+            
+            stock_item = None
+            if prefer_video and self.pexels_key:
+                stock_item = self._fetch_pexels_video(kw, save_dir, f"stock_{clip_index:03d}", orientation)
+            
+            if not stock_item and self.pixabay_key:
+                stock_item = self._fetch_pixabay_video(kw, save_dir, f"stock_{clip_index:03d}")
+            
+            if not stock_item:
+                stock_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{clip_index:03d}", is_short)
+
+            if stock_item:
+                # MEJORA 4: Recorte de clips de stock a máximo 10 segundos
+                stock_item["segment_duration"] = 10.0
+                media_list.append(stock_item)
+                current_total_duration += 10.0
+            
+            clip_index += 1
             time.sleep(0.1)
 
         if not media_list:
             logger.warning("No se pudo descargar ningún media. Generando imágenes AI de fallback...")
-            for i, segment in enumerate(segmented_script[:5]):
+            for i in range(5):
                 kw_fallback = "cinematic movie scene"
                 item = self._fetch_pollinations_image(kw_fallback, save_dir, f"fallback_{i}", is_short)
                 if item:
-                    item["segment_duration"] = segment.get("estimated_duration", 5)
+                    item["segment_duration"] = 10.0
                     media_list.append(item)
 
-        logger.info(f"Media total descargada: {len(media_list)} elementos")
+        logger.info(f"Media total descargada: {len(media_list)} elementos con ritmo 7-10-7")
         return media_list
 
     def _fetch_pexels_video(self, keyword: str, save_dir: Path, prefix: str, orientation: str = "portrait") -> Optional[dict]:
