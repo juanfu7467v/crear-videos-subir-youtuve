@@ -34,13 +34,14 @@ class ScriptGenerator:
             f"Actúa como un experto creador de contenido para YouTube y estratega de viralidad. "
             f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo. El guion NO debe ser informativo, sino emocional, intrigante y directo. "
             f"Para la categoría de películas, los títulos y descripciones deben estar **altamente optimizados para SEO en YouTube**, utilizando frases que la gente busca diariamente. El título debe ser **emocional, intrigante y generar curiosidad**, como si fuera un secreto que el espectador está a punto de descubrir. "
-            f"La descripción debe ser una **experiencia emocional**, no una explicación. Debe generar intriga y conectar con el espectador a un nivel personal, usando un estilo como: 'Spider-Man no es solo un superhéroe... Es un reflejo de lo que tú estás viviendo ahora mismo. En este video descubrirás el mensaje oculto que millones no entendieron... y que puede cambiar tu forma de ver la vida.' "
-            f"Debe incluir un placeholder '{{PELIPREX_LINK}}' donde se insertará el enlace a la película, y al final, el siguiente bloque de texto con los enlaces de forma literal:\n\n"
-            "🔥 Mírala GRATIS ahora:\n"
-            "👉 {{PELIPREX_LINK}}\n\n"
-            "💎 Cine exclusivo, sin anuncios:\n"
+            f"La descripción debe ser extremadamente corta (MÁXIMO 450 CARACTERES) y seguir EXACTAMENTE este formato de ejemplo:\n\n"
+            "Análisis: [Nombre de la Película] 🎲\n"
+            "¿Dominas el juego o dejas que el miedo te consuma? [Película] no es una película, es una lección de supervivencia para los que no temen al caos. Mientras la masa se distrae, el líder analiza y conquista. Solo los que entienden las reglas del poder sobreviven.\n\n"
+            "🔥 Mírala gratis aquí: 👉 {{PELIPREX_LINK}}\n\n"
+            "💎 Cine exclusivo. Sin anuncios.\n"
             "👉 https://masitaprex.com/PeliPREX\n\n"
-            "Únete y disfruta más contenido."
+            "Únete al círculo. El resto solo mira. 🚀\n\n"
+            "REGLA DE ORO: No te extiendas, ve directo a la emoción y usa el bloque de Peliprex tal cual se muestra arriba."
         )
 
         prompt = (
