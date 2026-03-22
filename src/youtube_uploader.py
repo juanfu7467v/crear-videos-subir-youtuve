@@ -23,16 +23,17 @@ class YouTubeUploader:
         self._initialized = False
         self._current_channel = None
         
-        # Mapeo exacto de los nombres de los secrets según tus configuraciones:
-        # Canal El Tío Jota -> YOUTUBE_CREDENTIALS_FILE
-        # Canal El Criterio -> YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2
+        # Mapeo estricto según requerimientos:
+        # El campo 'canal' del JSON puede venir como el nombre de la variable técnica
+        # o como el identificador CHANNEL_NAME.
         self.channel_map = {
             "CHANNEL_NAME": "YOUTUBE_CREDENTIALS_FILE",
+            "YOUTUBE_CREDENTIALS_FILE": "YOUTUBE_CREDENTIALS_FILE",
             "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2": "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
         }
 
-    def _load_credentials_from_secrets(self, channel_name: str):
-        """Carga credenciales desde el secreto de Fly usando nombres fijos."""
+    def _load_credentials_from_secrets(self, channel_input: str):
+        """Carga credenciales desde el secreto de Fly usando mapeo estricto."""
         
         # PRIORIDAD 1: Usar el nuevo secreto YOUTUBE_OAUTH2_DATA unificado (si existe)
         oauth2_data = get_valid_oauth2_data()
@@ -54,20 +55,30 @@ class YouTubeUploader:
             except Exception as e:
                 logger.error(f"Error procesando el nuevo secreto unificado: {e}")
         
-        # PRIORIDAD 2: Usar los secretos individuales configurados (YOUTUBE_CREDENTIALS_FILE o YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2)
-        # Obtenemos el nombre exacto de la variable desde el mapa
-        creds_env_var = self.channel_map.get(channel_name)
+        # PRIORIDAD 2: Mapeo estricto de la entrada del JSON a la variable técnica
+        # Limpiamos la entrada por si acaso
+        clean_input = str(channel_input).strip()
         
-        # Si el valor de 'canal' en el JSON no es uno de los dos conocidos,
-        # hacemos un fallback para intentar buscar la variable directamente si el nombre parece ser el de un secret
-        if not creds_env_var:
-            creds_env_var = channel_name
-            
-        logger.info(f"Cargando credenciales desde el secret: {creds_env_var}")
+        # Caso especial: Si la entrada es "El Criterio" o contiene espacios, 
+        # forzamos el mapeo a la variable correcta de ese canal.
+        if "Criterio" in clean_input:
+            creds_env_var = "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
+        elif "Jota" in clean_input or clean_input == "CHANNEL_NAME":
+            creds_env_var = "YOUTUBE_CREDENTIALS_FILE"
+        else:
+            # Intentar usar el mapa directo o la entrada tal cual si ya es técnica
+            creds_env_var = self.channel_map.get(clean_input, clean_input)
+        
+        # Validación final: Solo permitimos las dos variables técnicas conocidas
+        if creds_env_var not in ["YOUTUBE_CREDENTIALS_FILE", "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"]:
+            logger.warning(f"Entrada de canal '{clean_input}' no reconocida. Intentando fallback a YOUTUBE_CREDENTIALS_FILE.")
+            creds_env_var = "YOUTUBE_CREDENTIALS_FILE"
+
+        logger.info(f"Cargando credenciales desde el secret técnico: {creds_env_var}")
         creds_json = os.getenv(creds_env_var)
         
         if not creds_json:
-            logger.error(f"No se encontró el secret {creds_env_var} en el entorno.")
+            logger.error(f"ERROR: No se encontró el secret {creds_env_var} en el entorno de Fly.io.")
             return None
 
         try:
@@ -96,8 +107,8 @@ class YouTubeUploader:
 
     def upload(self, video_path: str, title: str, description: str = "", channel_name: str = "CHANNEL_NAME", **kwargs) -> str:
         if not self._initialize(channel_name):
-            logger.error(f"Fallo crítico: No se pudo inicializar YouTube para el canal {channel_name}. Verifica tus secrets.")
-            raise Exception(f"Error de inicialización de YouTube para {channel_name}")
+            logger.error(f"Fallo crítico: No se pudo inicializar YouTube para '{channel_name}'.")
+            raise Exception(f"Fallo en la inicialización de YouTube para {channel_name}")
 
         try:
             is_kids = kwargs.get('is_kids', False)
