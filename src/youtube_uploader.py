@@ -23,9 +23,12 @@ class YouTubeUploader:
         self._initialized = False
         self._current_channel = None
         
+        # Mapeo según requerimientos:
+        # CHANNEL_NAME -> Canal El Tío Jota (YOUTUBE_CREDENTIALS_FILE)
+        # YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2 -> Canal El Criterio
         self.channel_map = {
-            "EL TÍO JOTA": "YOUTUBE_CREDENTIALS_FILE",
-            "EL CRITERIO": "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
+            "CHANNEL_NAME": "YOUTUBE_CREDENTIALS_FILE",
+            "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2": "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
         }
 
     def _load_credentials_from_secrets(self, channel_name: str):
@@ -35,8 +38,6 @@ class YouTubeUploader:
         if oauth2_data:
             logger.info("Usando el nuevo secreto YOUTUBE_OAUTH2_DATA unificado para la subida.")
             try:
-                # El formato de YOUTUBE_OAUTH2_DATA ya es compatible con Credentials
-                # pero debemos asegurar que los campos requeridos por Credentials.from_authorized_user_info existan
                 creds_info = {
                     "token": oauth2_data['token'],
                     "refresh_token": oauth2_data['refresh_token'],
@@ -51,16 +52,17 @@ class YouTubeUploader:
                 return creds
             except Exception as e:
                 logger.error(f"Error procesando el nuevo secreto unificado: {e}")
-                # Fallback a los secretos individuales si falla el unificado
         
-        # PRIORIDAD 2: Usar los secretos individuales por canal (Legacy)
-        normalized_name = channel_name.strip().upper()
-        creds_env_var = self.channel_map.get(normalized_name)
+        # PRIORIDAD 2: Usar los secretos individuales por canal
+        # Buscamos directamente en el mapa de canales proporcionado
+        creds_env_var = self.channel_map.get(channel_name)
         
         if not creds_env_var:
-            creds_env_var = f"YOUTUBE_CREDENTIALS_FILE_{normalized_name.replace(' ', '_')}" if channel_name != "CHANNEL_NAME" else "YOUTUBE_CREDENTIALS_FILE"
+            # Fallback dinámico si no está en el mapa explícito
+            normalized_name = channel_name.strip().upper()
+            creds_env_var = f"YOUTUBE_CREDENTIALS_FILE_{normalized_name.replace(' ', '_')}"
         
-        logger.info(f"Cargando credenciales legacy desde: {creds_env_var}")
+        logger.info(f"Cargando credenciales desde: {creds_env_var}")
         creds_json = os.getenv(creds_env_var)
         
         if not creds_json:
@@ -69,7 +71,6 @@ class YouTubeUploader:
 
         try:
             data = json.loads(creds_json)
-            # Asegurar que SCOPES esté definido para Credentials
             scopes = data.get('scopes', ["https://www.googleapis.com/auth/youtube.upload"])
             creds = Credentials.from_authorized_user_info(data, scopes)
             
@@ -77,7 +78,7 @@ class YouTubeUploader:
                 creds.refresh(Request())
             return creds
         except Exception as e:
-            logger.error(f"Error procesando credenciales legacy: {e}")
+            logger.error(f"Error procesando credenciales: {e}")
             return None
 
     def _initialize(self, channel_name: str) -> bool:
@@ -94,8 +95,8 @@ class YouTubeUploader:
 
     def upload(self, video_path: str, title: str, description: str = "", channel_name: str = "CHANNEL_NAME", **kwargs) -> str:
         if not self._initialize(channel_name):
-            logger.warning("No se pudo inicializar YouTube (Subida simulada).")
-            return "https://youtu.be/SIMULADO"
+            logger.error(f"No se pudo inicializar YouTube para el canal {channel_name}.")
+            raise Exception(f"Fallo en la inicialización de YouTube para {channel_name}")
 
         try:
             is_kids = kwargs.get('is_kids', False)
@@ -144,4 +145,4 @@ class YouTubeUploader:
             return f"https://youtu.be/{video_id}"
         except Exception as e:
             logger.error(f"Error real subiendo a YouTube: {e}")
-            return "https://youtu.be/SIMULADO"
+            raise e

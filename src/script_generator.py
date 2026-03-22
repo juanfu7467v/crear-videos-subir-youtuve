@@ -53,9 +53,14 @@ class ScriptGenerator:
             "Pexels no entiende conceptos abstractos. Usa términos como: 'man thinking', 'city traffic', 'cinematic landscape', 'close up face', 'technology', 'dark room'. "
             "EVITA términos como 'paradox', 'spider-men', 'comic book' (si no son comunes en stock), 'fate', 'destiny'.\n"
             "- DURACIÓN: " + ("Máximo 55 segundos" if "short" in format_suggested else "Entre 3 y 5 minutos") + ".\n\n"
+            "INSTRUCCIÓN ESPECIAL PARA BÚSQUEDA DE PELÍCULAS:\n"
+            "Analiza profundamente el tema del video y extrae únicamente el nombre de la película principal.\n"
+            "Ejemplo: si el tema es sobre el multiverso de Spider-Man, el resultado debe ser 'Spider-Man'.\n"
+            "No incluyas frases ni descripciones, solo el nombre exacto de la película.\n\n"
             "Responde ÚNICAMENTE con un objeto JSON que contenga:\n"
-            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script'.\n"
-            f"En 'voice' usa siempre: {voz}.\n\n"
+            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script', 'peliprex_search_term'.\n"
+            f"En 'voice' usa siempre: {voz}.\n"
+            "En 'peliprex_search_term' coloca el nombre exacto de la película principal identificada.\n\n"
             "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales simples en inglés) y 'estimated_duration'."
         )
         

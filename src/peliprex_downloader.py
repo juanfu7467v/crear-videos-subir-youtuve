@@ -26,7 +26,7 @@ class PeliprexDownloader:
     def clean_movie_title(self, text: str) -> str:
         """
         Extrae el nombre de la película de un título o frase del guion.
-        Ejemplo: '¿Reboots como SPIDER MAN:' -> 'SPIDER MAN'
+        Nota: Esta función se mantiene por compatibilidad, pero ahora se prefiere peliprex_search_term de la IA.
         """
         if not text: return ""
         
@@ -56,7 +56,6 @@ class PeliprexDownloader:
             clean = re.sub(suffix, '', clean, flags=re.IGNORECASE)
         
         # 4. Limpieza final: si sigue siendo muy largo, tomamos las primeras 3-4 palabras
-        # (La mayoría de títulos de películas no son más largos)
         words = clean.split()
         if len(words) > 4:
             clean = " ".join(words[:4])
@@ -65,22 +64,20 @@ class PeliprexDownloader:
         return clean
 
     def search_movie(self, movie_title: str) -> List[Dict]:
-        """Busca una película en la API de Peliprex usando un término limpio."""
-        clean_query = self.clean_movie_title(movie_title)
-        if not clean_query:
+        """Busca una película en la API de Peliprex usando el término exacto proporcionado."""
+        if not movie_title:
             return []
             
         try:
-            params = {"q": clean_query}
+            params = {"q": movie_title}
             headers = {"User-Agent": random.choice(self.user_agents)}
-            logger.info(f"Consultando API Peliprex: {self.base_url}?q={clean_query}")
+            logger.info(f"Consultando API Peliprex: {self.base_url}?q={movie_title}")
             resp = self.session.get(self.base_url, params=params, headers=headers, timeout=30)
             resp.raise_for_status()
             data = resp.json()
             
             if isinstance(data, list):
                 # Filtrar estrictamente para ignorar resultados que sean solo de YouTube
-                # Buscamos los que vienen de Telegram (archivos directos)
                 valid_results = []
                 for item in data:
                     url = item.get("pelicula_url") or item.get("direct_link") or item.get("stream_url")
@@ -151,13 +148,12 @@ class PeliprexDownloader:
 
     def fetch_movie_clips(self, movie_title: str, save_dir: Path, clips_needed: int = 3) -> List[Dict]:
         """Busca y descarga varios clips cortos de una película en Peliprex con filtrado inteligente."""
-        clean_query = self.clean_movie_title(movie_title)
-        normalized_query = self._normalize_text(clean_query)
+        normalized_query = self._normalize_text(movie_title)
         
-        results = self.search_movie(clean_query)
+        results = self.search_movie(movie_title)
         
         if not results:
-            logger.warning(f"No se encontraron archivos directos en Peliprex para '{clean_query}'")
+            logger.warning(f"No se encontraron archivos directos en Peliprex para '{movie_title}'")
             return []
 
         # Filtrado de títulos que coinciden con lo buscado
@@ -178,7 +174,7 @@ class PeliprexDownloader:
                     logger.info(f"Coincidencia parcial aceptada: '{res_title}'")
 
         if not filtered_results:
-            logger.warning(f"No se encontraron coincidencias satisfactorias para '{clean_query}'.")
+            logger.warning(f"No se encontraron coincidencias satisfactorias para '{movie_title}'.")
             return []
 
         logger.info(f"Total de películas coincidentes con archivos directos: {len(filtered_results)}")
@@ -204,7 +200,7 @@ class PeliprexDownloader:
                     "path": str(output_path),
                     "type": "video",
                     "duration": float(duration),
-                    "keyword": clean_query,
+                    "keyword": movie_title,
                     "source": "peliprex",
                     "title": result.get("titulo", "Unknown"),
                     "width": 1280,

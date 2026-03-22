@@ -114,7 +114,8 @@ class VideoAutoPipeline:
                 video_id=video_id,
                 prefer_video=True,
                 is_short=is_short,
-                categoria=categoria
+                categoria=categoria,
+                script_data=script_data
             )
             
             # VALIDACIÓN CRÍTICA DE MEDIA
