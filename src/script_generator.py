@@ -17,11 +17,11 @@ class ScriptGenerator:
         )
 
     def generate_full_script(self, trend_data: dict) -> dict:
-        topic = trend_data.get(\'tema_recomendado\') or trend_data.get(\'topic\', \'curiosidades\')
-        canal = trend_data.get(\'canal\', \'El Tío Jota\')
-        categoria = trend_data.get(\'categoria\', \'general\').lower()
-        user_prompt_ia = trend_data.get(\'prompt_ia\')
-        format_suggested = trend_data.get(\'formato_sugerido\', \'Short\').lower()
+        topic = trend_data.get('tema_recomendado') or trend_data.get('topic', 'curiosidades')
+        canal = trend_data.get('canal', 'El Tío Jota')
+        categoria = trend_data.get('categoria', 'general').lower()
+        user_prompt_ia = trend_data.get('prompt_ia')
+        format_suggested = trend_data.get('formato_sugerido', 'Short').lower()
         
         if "Criterio" in canal or "películas" in categoria:
             estilo_base = "emocional, intrigante, directo, con un inicio impactante y frases cortas tipo TikTok. Genera curiosidad constante y evita el lenguaje académico. Habla directamente al espectador."
@@ -32,10 +32,10 @@ class ScriptGenerator:
 
         base_instruction = user_prompt_ia if user_prompt_ia else (
             f"Actúa como un experto creador de contenido para YouTube y estratega de viralidad. "
-            f"Tu objetivo es crear un guion para el canal \'{canal}\' que logre enganchar, emocionar y retener al espectador hasta el último segundo. El guion NO debe ser informativo, sino emocional, intrigante y directo. "
+            f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo. El guion NO debe ser informativo, sino emocional, intrigante y directo. "
             f"Para la categoría de películas, los títulos y descripciones deben estar **altamente optimizados para SEO en YouTube**, utilizando frases que la gente busca diariamente. El título debe ser **emocional, intrigante y generar curiosidad**, como si fuera un secreto que el espectador está a punto de descubrir. "
-            f"La descripción debe ser una **experiencia emocional**, no una explicación. Debe generar intriga y conectar con el espectador a un nivel personal, usando un estilo como: \'Spider-Man no es solo un superhéroe... Es un reflejo de lo que tú estás viviendo ahora mismo. En este video descubrirás el mensaje oculto que millones no entendieron... y que puede cambiar tu forma de ver la vida.\' "
-            f"Debe incluir un placeholder \'{{PELIPREX_LINK}}\' donde se insertará el enlace a la película, y al final, el siguiente bloque de texto con los enlaces de forma literal:\n\n"
+            f"La descripción debe ser una **experiencia emocional**, no una explicación. Debe generar intriga y conectar con el espectador a un nivel personal, usando un estilo como: 'Spider-Man no es solo un superhéroe... Es un reflejo de lo que tú estás viviendo ahora mismo. En este video descubrirás el mensaje oculto que millones no entendieron... y que puede cambiar tu forma de ver la vida.' "
+            f"Debe incluir un placeholder '{{PELIPREX_LINK}}' donde se insertará el enlace a la película, y al final, el siguiente bloque de texto con los enlaces de forma literal:\n\n"
             "🔥 Mírala GRATIS ahora:\n"
             "👉 {{PELIPREX_LINK}}\n\n"
             "💎 Cine exclusivo, sin anuncios:\n"
@@ -58,19 +58,19 @@ class ScriptGenerator:
             "REQUISITOS TÉCNICOS:\n"
             "- IDIOMA: Español natural.\n"
             "- KEYWORDS VISUALES: Para cada segmento, proporciona palabras clave en inglés que sean SIMPLES, VISUALES y CONCRETAS. "
-            "Pexels no entiende conceptos abstractos. Usa términos como: \'man thinking\', \'city traffic\', \'cinematic landscape\', \'close up face\', \'technology\', \'dark room\'. "
-            "EVITA términos como \'paradox\', \'spider-men\', \'comic book\' (si no son comunes en stock), \'fate\', \'destiny\'.\n"
+            "Pexels no entiende conceptos abstractos. Usa términos como: 'man thinking', 'city traffic', 'cinematic landscape', 'close up face', 'technology', 'dark room'. "
+            "EVITA términos como 'paradox', 'spider-men', 'comic book' (si no son comunes en stock), 'fate', 'destiny'.\n"
             "- DURACIÓN: " + ("Máximo 55 segundos" if "short" in format_suggested else "Entre 3 y 5 minutos") + ".\n\n"
             "INSTRUCCIÓN ESPECIAL PARA BÚSQUEDA DE PELÍCULAS:\n"
             "Analiza profundamente el tema del video y extrae únicamente el nombre de la película principal.\n"
-            "Ejemplo: si el tema es sobre el multiverso de Spider-Man, el resultado debe ser \'Spider-Man\'.\n"
+            "Ejemplo: si el tema es sobre el multiverso de Spider-Man, el resultado debe ser 'Spider-Man'.\n"
             "No incluyas frases ni descripciones, solo el nombre exacto de la película.\n\n"
             "Responde ÚNICAMENTE con un objeto JSON que contenga:\n"
-            "\'title\', \'full_script\', \'keywords\', \'voice\', \'description\', \'tags\', \'prompt_ia\', \'estilo_contenido\', \'hook\', \'estructura\', \'segmented_script\', \'peliprex_search_term\'.\n"
-            f"En \'voice\' usa siempre: {voz}.\n"
-            "En \'peliprex_search_term\' coloca el nombre exacto de la película principal identificada.\n"
-            "Si la categoría es \'películas\', la descripción debe incluir un placeholder \'{{PELIPREX_LINK}}\' donde se insertará el enlace a la película, y el bloque de texto final con los enlaces de Peliprex.\n\n"
-            "Cada objeto en \'segmented_script\' debe tener: \'segment_text\', \'keywords\' (lista de 3-5 términos visuales simples en inglés) and \'estimated_duration\'."
+            "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script', 'peliprex_search_term'.\n"
+            f"En 'voice' usa siempre: {voz}.\n"
+            "En 'peliprex_search_term' coloca el nombre exacto de la película principal identificada.\n"
+            "Si la categoría es 'películas', la descripción debe incluir un placeholder '{{PELIPREX_LINK}}' donde se insertará el enlace a la película, y el bloque de texto final con los enlaces de Peliprex.\n\n"
+            "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales simples en inglés) and 'estimated_duration'."
         )
         
         max_retries = 3
@@ -95,18 +95,18 @@ class ScriptGenerator:
                     return None
 
                 data = response.json()
-                text_response = data[\'candidates\'][0][\'content\'][\'parts\'][0][\'text\']
+                text_response = data['candidates'][0]['content']['parts'][0]['text']
                 
-                raw = re.search(r\'\\{.*\\}\'\', text_response, re.DOTALL)
+                raw = re.search(r'\{.*\}', text_response, re.DOTALL)
                 data = json.loads(raw.group(0)) if raw else json.loads(text_response)
 
-                if \'full_script\' in data:
+                if 'full_script' in data:
                     real_name = "El Tío Jota"
                     if canal and "Criterio" in canal:
                         real_name = "El Criterio"
                     
-                    data[\'full_script\'] = data[\'full_script\'].replace("CHANNEL_NAME_2", real_name)
-                    data[\'full_script\'] = data[\'full_script\'].replace("CHANNEL_NAME", real_name)
+                    data['full_script'] = data['full_script'].replace("CHANNEL_NAME_2", real_name)
+                    data['full_script'] = data['full_script'].replace("CHANNEL_NAME", real_name)
                 
                 return data
                 
