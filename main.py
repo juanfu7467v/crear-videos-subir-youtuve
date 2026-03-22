@@ -94,6 +94,7 @@ class VideoAutoPipeline:
             if "películas" in categoria.lower() and script_data.get('peliprex_search_term'):
                 peliprex_movie_name = script_data.get('peliprex_search_term')
                 peliprex_link = self.media_fetcher.peliprex_downloader.generate_peliprex_link(peliprex_movie_name)
+                # Reemplazar todas las ocurrencias del placeholder
                 video_description = video_description.replace('{{PELIPREX_LINK}}', peliprex_link)
                 logger.info(f"🔗 Enlace Peliprex generado para {peliprex_movie_name}: {peliprex_link}")
 

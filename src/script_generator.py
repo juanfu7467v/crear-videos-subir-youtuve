@@ -33,9 +33,15 @@ class ScriptGenerator:
         base_instruction = user_prompt_ia if user_prompt_ia else (
             f"Actúa como un experto creador de contenido para YouTube y estratega de viralidad. "
             f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo. "
-            f"Para la categoría de películas, los títulos y descripciones deben estar altamente optimizados para SEO en YouTube, utilizando frases que la gente busca diariamente. "
-            f"El título debe ser directo y elocuente, como 'Scary Movie película completa en español latino'. "
-            f"La descripción debe ser un análisis crítico y atractivo, incluyendo un enlace a la película en Peliprex."
+            f"Para la categoría de películas, los títulos y descripciones deben estar **altamente optimizados para SEO en YouTube**, utilizando frases que la gente busca diariamente. "
+            f"El título debe ser **directo, conciso y extremadamente llamativo**, siguiendo el formato exacto: 'Nombre de la película película completa en español latino'. "
+            f"La descripción debe ser un **análisis provocador, claro, entendible, narcisista y manipulador**, con un tono 'alfa' que invite a la acción y a la reflexión crítica. "
+            f"Debe incluir un placeholder '{{PELIPREX_LINK}}' donde se insertará el enlace a la película, y al final, el siguiente bloque de texto con los enlaces de forma literal:\n\n"
+            "🔥 Mírala GRATIS ahora:\n"
+            "👉 {{PELIPREX_LINK}}\n\n"
+            "💎 Cine exclusivo, sin anuncios:\n"
+            "👉 https://masitaprex.com/PeliPREX\n\n"
+            "Únete y disfruta más contenido."
         )
 
         prompt = (
@@ -64,7 +70,7 @@ class ScriptGenerator:
             "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script', 'peliprex_search_term'.\n"
             f"En 'voice' usa siempre: {voz}.\n"
             "En 'peliprex_search_term' coloca el nombre exacto de la película principal identificada.\n"
-            "Si la categoría es 'películas', la descripción debe incluir un placeholder '{{PELIPREX_LINK}}' donde se insertará el enlace a la película.\n\n"
+            "Si la categoría es 'películas', la descripción debe incluir un placeholder '{{PELIPREX_LINK}}' donde se insertará el enlace a la película, y el bloque de texto final con los enlaces de Peliprex.\n\n"
             "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales simples en inglés) and 'estimated_duration'."
         )
         
