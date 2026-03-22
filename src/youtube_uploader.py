@@ -23,17 +23,18 @@ class YouTubeUploader:
         self._initialized = False
         self._current_channel = None
         
-        # Mapeo según requerimientos:
-        # CHANNEL_NAME -> Canal El Tío Jota (YOUTUBE_CREDENTIALS_FILE)
-        # YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2 -> Canal El Criterio
+        # Mapeo exacto de los nombres de los secrets según tus configuraciones:
+        # Canal El Tío Jota -> YOUTUBE_CREDENTIALS_FILE
+        # Canal El Criterio -> YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2
         self.channel_map = {
             "CHANNEL_NAME": "YOUTUBE_CREDENTIALS_FILE",
             "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2": "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
         }
 
     def _load_credentials_from_secrets(self, channel_name: str):
-        """Carga credenciales desde el secreto de Fly."""
-        # PRIORIDAD 1: Usar el nuevo secreto YOUTUBE_OAUTH2_DATA unificado
+        """Carga credenciales desde el secreto de Fly usando nombres fijos."""
+        
+        # PRIORIDAD 1: Usar el nuevo secreto YOUTUBE_OAUTH2_DATA unificado (si existe)
         oauth2_data = get_valid_oauth2_data()
         if oauth2_data:
             logger.info("Usando el nuevo secreto YOUTUBE_OAUTH2_DATA unificado para la subida.")
@@ -53,20 +54,20 @@ class YouTubeUploader:
             except Exception as e:
                 logger.error(f"Error procesando el nuevo secreto unificado: {e}")
         
-        # PRIORIDAD 2: Usar los secretos individuales por canal
-        # Buscamos directamente en el mapa de canales proporcionado
+        # PRIORIDAD 2: Usar los secretos individuales configurados (YOUTUBE_CREDENTIALS_FILE o YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2)
+        # Obtenemos el nombre exacto de la variable desde el mapa
         creds_env_var = self.channel_map.get(channel_name)
         
+        # Si el valor de 'canal' en el JSON no es uno de los dos conocidos,
+        # hacemos un fallback para intentar buscar la variable directamente si el nombre parece ser el de un secret
         if not creds_env_var:
-            # Fallback dinámico si no está en el mapa explícito
-            normalized_name = channel_name.strip().upper()
-            creds_env_var = f"YOUTUBE_CREDENTIALS_FILE_{normalized_name.replace(' ', '_')}"
-        
-        logger.info(f"Cargando credenciales desde: {creds_env_var}")
+            creds_env_var = channel_name
+            
+        logger.info(f"Cargando credenciales desde el secret: {creds_env_var}")
         creds_json = os.getenv(creds_env_var)
         
         if not creds_json:
-            logger.error(f"No se encontró el secreto {creds_env_var}")
+            logger.error(f"No se encontró el secret {creds_env_var} en el entorno.")
             return None
 
         try:
@@ -78,7 +79,7 @@ class YouTubeUploader:
                 creds.refresh(Request())
             return creds
         except Exception as e:
-            logger.error(f"Error procesando credenciales: {e}")
+            logger.error(f"Error procesando el JSON del secret {creds_env_var}: {e}")
             return None
 
     def _initialize(self, channel_name: str) -> bool:
@@ -95,8 +96,8 @@ class YouTubeUploader:
 
     def upload(self, video_path: str, title: str, description: str = "", channel_name: str = "CHANNEL_NAME", **kwargs) -> str:
         if not self._initialize(channel_name):
-            logger.error(f"No se pudo inicializar YouTube para el canal {channel_name}.")
-            raise Exception(f"Fallo en la inicialización de YouTube para {channel_name}")
+            logger.error(f"Fallo crítico: No se pudo inicializar YouTube para el canal {channel_name}. Verifica tus secrets.")
+            raise Exception(f"Error de inicialización de YouTube para {channel_name}")
 
         try:
             is_kids = kwargs.get('is_kids', False)
