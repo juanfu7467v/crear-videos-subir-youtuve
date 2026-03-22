@@ -259,5 +259,42 @@ class MediaFetcher:
             return False
 
     def generate_thumbnail(self, topic: str, title: str, save_path: str, categoria: str = "general") -> bool:
-        # Lógica simplificada para generar miniatura
+        if "películas" in categoria.lower():
+            logger.info(f"Buscando miniatura de TMDB para: {topic}")
+            tmdb_poster_url = self._fetch_tmdb_poster(topic)
+            if tmdb_poster_url:
+                if self._download_file(tmdb_poster_url, save_path):
+                    logger.info(f"✅ Miniatura de TMDB descargada: {save_path}")
+                    return True
+                else:
+                    logger.warning(f"❌ No se pudo descargar la miniatura de TMDB desde {tmdb_poster_url}")
+            else:
+                logger.warning(f"❌ No se encontró póster en TMDB para: {topic}")
+        # Lógica simplificada para generar miniatura (fallback si no es película o falla TMDB)
         return False
+
+    def _fetch_tmdb_poster(self, movie_title: str) -> Optional[str]:
+        tmdb_api_key = os.getenv("TMDB_API_KEY")
+        if not tmdb_api_key: 
+            logger.error("TMDB_API_KEY no configurada.")
+            return None
+        
+        search_url = "https://api.themoviedb.org/3/search/movie"
+        params = {"api_key": tmdb_api_key, "query": movie_title, "language": "es-ES"}
+        
+        try:
+            resp = self.session.get(search_url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            results = data.get("results", [])
+            if results:
+                # Tomar el primer resultado y obtener la URL del póster
+                poster_path = results[0].get("poster_path")
+                if poster_path:
+                    # URL base para imágenes de TMDB
+                    return f"https://image.tmdb.org/t/p/w500{poster_path}"
+            return None
+        except Exception as e:
+            logger.error(f"Error buscando póster en TMDB para \'{movie_title}\': {e}")
+            return None

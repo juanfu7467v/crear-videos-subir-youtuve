@@ -32,7 +32,10 @@ class ScriptGenerator:
 
         base_instruction = user_prompt_ia if user_prompt_ia else (
             f"Actúa como un experto creador de contenido para YouTube y estratega de viralidad. "
-            f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo."
+            f"Tu objetivo es crear un guion para el canal '{canal}' que logre enganchar, emocionar y retener al espectador hasta el último segundo. "
+            f"Para la categoría de películas, los títulos y descripciones deben estar altamente optimizados para SEO en YouTube, utilizando frases que la gente busca diariamente. "
+            f"El título debe ser directo y elocuente, como 'Scary Movie película completa en español latino'. "
+            f"La descripción debe ser un análisis crítico y atractivo, incluyendo un enlace a la película en Peliprex."
         )
 
         prompt = (
@@ -60,8 +63,9 @@ class ScriptGenerator:
             "Responde ÚNICAMENTE con un objeto JSON que contenga:\n"
             "'title', 'full_script', 'keywords', 'voice', 'description', 'tags', 'prompt_ia', 'estilo_contenido', 'hook', 'estructura', 'segmented_script', 'peliprex_search_term'.\n"
             f"En 'voice' usa siempre: {voz}.\n"
-            "En 'peliprex_search_term' coloca el nombre exacto de la película principal identificada.\n\n"
-            "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales simples en inglés) y 'estimated_duration'."
+            "En 'peliprex_search_term' coloca el nombre exacto de la película principal identificada.\n"
+            "Si la categoría es 'películas', la descripción debe incluir un placeholder '{{PELIPREX_LINK}}' donde se insertará el enlace a la película.\n\n"
+            "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (lista de 3-5 términos visuales simples en inglés) and 'estimated_duration'."
         )
         
         max_retries = 3

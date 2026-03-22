@@ -17,7 +17,7 @@ class MovieClipsFetcher:
     def __init__(self):
         self.kinocheck_base = "https://api.kinocheck.com"
         self.tmdb_search_url = "https://api.themoviedb.org/3/search/movie"
-        self.tmdb_api_key = os.getenv("TMDB_API_KEY", "8baba8ab6b8bbe247645bcae7df63d0d")
+        self.tmdb_api_key = os.getenv("TMDB_API_KEY")
         self.session = requests.Session()
 
     def fetch_movie_clips(self, movie_title: str, save_dir: Path, clips_needed: int = 5) -> List[Dict]:

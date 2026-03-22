@@ -146,6 +146,14 @@ class PeliprexDownloader:
         text = re.sub(r'[^a-z0-9\s]', '', text)
         return text.strip()
 
+    def generate_peliprex_link(self, movie_name: str) -> str:
+        """Genera el enlace de Peliprex para una película dada."""
+        if not movie_name:
+            return ""
+        # Codificar el nombre de la película para la URL
+        encoded_movie_name = requests.utils.quote(movie_name)
+        return f"https://masitaprex.com/PeliPREX?movie={encoded_movie_name}"
+
     def fetch_movie_clips(self, movie_title: str, save_dir: Path, clips_needed: int = 3) -> List[Dict]:
         """Busca y descarga varios clips cortos de una película en Peliprex con filtrado inteligente."""
         normalized_query = self._normalize_text(movie_title)

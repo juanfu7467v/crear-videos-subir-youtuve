@@ -88,7 +88,15 @@ class VideoAutoPipeline:
             
             # Usar el título sugerido si el generador no dio uno mejor
             video_title = script_data.get('title') or title_suggested or topic
-            
+            video_description = script_data.get('description', '')
+
+            # Generar enlace de Peliprex si es categoría películas y hay término de búsqueda
+            if "películas" in categoria.lower() and script_data.get('peliprex_search_term'):
+                peliprex_movie_name = script_data.get('peliprex_search_term')
+                peliprex_link = self.media_fetcher.peliprex_downloader.generate_peliprex_link(peliprex_movie_name)
+                video_description = video_description.replace('{{PELIPREX_LINK}}', peliprex_link)
+                logger.info(f"🔗 Enlace Peliprex generado para {peliprex_movie_name}: {peliprex_link}")
+
             # 2. Generar Audio (TTS)
             logger.info("2/6 Generando audio...")
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -145,7 +153,8 @@ class VideoAutoPipeline:
             # MEJORA: Si es películas, intentar miniatura de TMDB primero
             if "películas" in categoria.lower():
                 tmdb_thumb = str(output_dir / "tmdb_thumb.jpg")
-                if self.media_fetcher.generate_thumbnail(topic, video_title, tmdb_thumb, categoria=categoria):
+                thumbnail_search_term = peliprex_movie_name if "peliprex_movie_name" in locals() else topic
+                if self.media_fetcher.generate_thumbnail(thumbnail_search_term, video_title, tmdb_thumb, categoria=categoria):
                     thumbnail_path = tmdb_thumb
 
             # 6. Subir a YouTube
@@ -159,7 +168,7 @@ class VideoAutoPipeline:
             video_url = self.yt_uploader.upload(
                 video_path=video_path,
                 title=video_title,
-                description=script_data.get('description', ''),
+                description=video_description,
                 tags=script_data.get('tags', []),
                 channel_name=canal,
                 is_short=is_short,
