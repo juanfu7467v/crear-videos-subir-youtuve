@@ -85,7 +85,7 @@ class MediaFetcher:
             movie_title = self.peliprex_downloader.clean_movie_title(raw_title)
             logger.info(f"Usando limpieza de texto como fallback: {movie_title}")
         
-        # Intentar obtener clips de Peliprex (Nueva fuente principal)
+        # Intentar obtener clips de Peliprex (Fuente principal para todas las categorías)
         logger.info(f"Intentando obtener clips de Peliprex para: {movie_title}")
         movie_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, cycles_needed)
         

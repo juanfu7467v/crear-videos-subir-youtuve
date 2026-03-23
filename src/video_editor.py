@@ -171,17 +171,19 @@ class VideoEditor:
             time_per_sentence = float(duration) / len(sentences)
             for i, sentence in enumerate(sentences):
                 try:
-                    fs = 120 if is_short else 80
+                    # MEJORA: Aumentar tamaño de subtítulos (de 120/80 a 150/100) y cambiar color a blanco con fondo negro
+                    fs = 150 if is_short else 100
                     txt_clip = TextClip(
                         sentence, 
                         fontsize=fs, 
-                        color='yellow',
+                        color='white',
                         font='Liberation-Sans-Bold',
                         stroke_color='black',
-                        stroke_width=4,
+                        stroke_width=5,
                         method='caption',
                         size=(target_w * 0.9, None),
-                        align='center'
+                        align='center',
+                        bg_color='black'
                     ).set_start(float(i * time_per_sentence)).set_duration(float(time_per_sentence)).set_position(('center', target_h * 0.75))
                     subtitles.append(txt_clip)
                 except Exception as e:
