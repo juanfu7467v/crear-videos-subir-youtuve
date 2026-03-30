@@ -9,6 +9,7 @@ from typing import Optional, Dict, List
 import requests
 from src.movie_clips_fetcher import MovieClipsFetcher
 from src.peliprex_downloader import PeliprexDownloader
+from src.archive_org_downloader import ArchiveOrgDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class MediaFetcher:
         # Eliminamos la dependencia de YouTube API key
         self.movie_clips_fetcher = MovieClipsFetcher()
         self.peliprex_downloader = PeliprexDownloader()
+        self.archive_org_downloader = ArchiveOrgDownloader()
         self.session     = requests.Session()
         self.session.headers.update({"User-Agent": "ElTioJota-AutoVideo/1.0"})
 
@@ -137,6 +139,9 @@ class MediaFetcher:
             if not stock_item and self.pixabay_key:
                 stock_item = self._fetch_pixabay_video(kw, save_dir, f"stock_{clip_index:03d}")
             
+            if not stock_item:
+                stock_item = self.archive_org_downloader.fetch_archive_org_video(kw, save_dir, f"stock_{clip_index:03d}")
+
             if not stock_item:
                 stock_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{clip_index:03d}", is_short)
 
