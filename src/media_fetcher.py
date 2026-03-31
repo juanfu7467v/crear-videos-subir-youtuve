@@ -139,7 +139,9 @@ class MediaFetcher:
             if not stock_item and self.pixabay_key:
                 stock_item = self._fetch_pixabay_video(kw, save_dir, f"stock_{clip_index:03d}")
             
+            # Integración de Archive.org como fuente adicional
             if not stock_item:
+                logger.info(f"Ritmo 7-10-7: Buscando en Archive.org para '{kw}'")
                 stock_item = self.archive_org_downloader.fetch_archive_org_video(kw, save_dir, f"stock_{clip_index:03d}")
 
             if not stock_item:

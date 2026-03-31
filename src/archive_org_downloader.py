@@ -15,16 +15,17 @@ class ArchiveOrgDownloader:
         self.session.headers.update({"User-Agent": "ElTioJota-AutoVideo/1.0"})
 
     def search_video(self, query: str) -> List[Dict]:
-        """Busca videos en Archive.org por nombre exacto."""
+        """Busca videos en Archive.org por palabras clave."""
         if not query:
             return []
 
         try:
+            # Búsqueda más flexible por palabras clave
             params = {
-                "q": f'title:"{query}" AND mediatype:movies',
+                "q": f"{query} AND mediatype:movies",
                 "fl": "identifier,title,description,publicdate,creator,subject,runtime",
                 "output": "json",
-                "rows": 5, # Limitar a 5 resultados para relevancia
+                "rows": 10,
             }
             logger.info(f"Buscando en Archive.org: {query}")
             resp = self.session.get(self.base_search_url, params=params, timeout=15)
@@ -32,13 +33,6 @@ class ArchiveOrgDownloader:
             data = resp.json()
             
             docs = data.get("response", {}).get("docs", [])
-            
-            # Filtrar por coincidencia exacta de título si es posible
-            exact_matches = [doc for doc in docs if doc.get("title", "").lower() == query.lower()]
-            if exact_matches:
-                logger.info(f"Encontradas {len(exact_matches)} coincidencias exactas en Archive.org para '{query}'.")
-                return exact_matches
-            
             logger.info(f"Encontrados {len(docs)} resultados en Archive.org para '{query}'.")
             return docs
 

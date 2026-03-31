@@ -15,6 +15,7 @@ import re
 import requests
 from pathlib import Path
 from typing import Optional
+from src.thumbnail_generator import ThumbnailGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,8 @@ class QualityChecker:
         self.min_score = int(os.getenv("MIN_QC_SCORE", "60"))
         # Usando el modelo gemini-2.5-flash que es el nuevo estándar
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
+        # Inicializar el generador de miniaturas de OpenAI
+        self.thumbnail_generator = ThumbnailGenerator(os.getenv("OPENAI_API_KEY"))
 
     def _analyze_frame(self, frame_path: str) -> Optional[dict]:
         if not self.api_key:
@@ -150,50 +153,11 @@ class QualityChecker:
 
     def _generate_ai_thumbnail(self, script_data: dict, output_path: str) -> Optional[str]:
         """
-        Genera una miniatura atractiva usando la API de Gemini Imagen.
-        Nota: Requiere que la API key tenga permisos para Imagen 3.
+        Genera una miniatura atractiva usando OpenAI (DALL-E 3).
         """
-        try:
-            topic = script_data.get('title', 'Curiosidades')
-            keywords = script_data.get('keywords', '')
-            if isinstance(keywords, list): keywords = ", ".join(keywords)
-
-            # Prompt optimizado para miniaturas virales
-            prompt = (
-                f"Create a high-quality, professional YouTube thumbnail for a video about: {topic}. "
-                f"Context: {keywords}. Style: Cinematic, ultra-realistic, vibrant colors, "
-                "high contrast, clickbait style but professional, generating curiosity and mystery. "
-                "No text, only a powerful visual image."
-            )
-
-            # URL para Imagen 3 en Gemini API
-            imagen_url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3:generateImages?key={self.api_key}"
-            
-            payload = {
-                "instances": [{"prompt": prompt}],
-                "parameters": {
-                    "sampleCount": 1,
-                    "aspectRatio": "16:9",
-                    "outputMimeType": "image/jpeg"
-                }
-            }
-
-            response = requests.post(imagen_url, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if 'predictions' in data and len(data['predictions']) > 0:
-                    img_b64 = data['predictions'][0]['bytesBase64Encoded']
-                    with open(output_path, "wb") as f:
-                        f.write(base64.b64decode(img_b64))
-                    logger.info(f"Miniatura IA generada exitosamente: {output_path}")
-                    return output_path
-            
-            logger.warning(f"No se pudo generar miniatura con IA (Status: {response.status_code}). Usando frame del video.")
-            return None
-        except Exception as e:
-            logger.error(f"Error generando miniatura con IA: {e}")
-            return None
+        # Reemplazamos Gemini Imagen por OpenAI DALL-E 3 (más efectivo)
+        logger.info("Utilizando OpenAI para la generación de la miniatura...")
+        return self.thumbnail_generator.generate_thumbnail(script_data, output_path)
 
     def _extract_frames(self, video_path: str, num_frames: int = 3) -> list:
         frames = []
