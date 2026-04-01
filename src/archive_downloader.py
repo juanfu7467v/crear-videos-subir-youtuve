@@ -36,9 +36,12 @@ class ArchiveDownloader:
             return []
 
         try:
+            # Limpiar query para evitar caracteres especiales que rompan la API
+            clean_query = re.sub(r'[^a-zA-Z0-9\s]', '', query)
+            
             # Construir una consulta que busque en título, descripción y temas
             # Priorizamos mediatype:movies y formatos MP4
-            search_query = f'(title:("{query}") OR description:("{query}") OR subject:("{query}")) AND mediatype:movies'
+            search_query = f'(title:("{clean_query}") OR description:("{clean_query}") OR subject:("{clean_query}")) AND mediatype:movies'
             
             params = {
                 "q": search_query,
@@ -48,17 +51,21 @@ class ArchiveDownloader:
                 "rows": limit,
             }
             
-            logger.info(f"Búsqueda inteligente en Archive.org: {query}")
+            logger.info(f"Búsqueda inteligente en Archive.org (Real-time): {clean_query}")
             resp = self.session.get(self.base_search_url, params=params, timeout=20)
             resp.raise_for_status()
             data = resp.json()
             
             docs = data.get("response", {}).get("docs", [])
             
-            # Si no hay resultados, intentar una búsqueda más relajada
-            if not docs and " " in query:
-                simple_query = " OR ".join(query.split())
+            # Si no hay resultados, intentar una búsqueda más relajada (palabras sueltas)
+            if not docs and " " in clean_query:
+                words = clean_query.split()
+                # Usar las 2 palabras más largas (suelen ser las más descriptivas)
+                words.sort(key=len, reverse=True)
+                simple_query = " OR ".join(words[:2])
                 params["q"] = f'({simple_query}) AND mediatype:movies'
+                logger.info(f"Reintentando búsqueda relajada en Archive.org: {simple_query}")
                 resp = self.session.get(self.base_search_url, params=params, timeout=20)
                 docs = resp.json().get("response", {}).get("docs", [])
 
@@ -145,19 +152,27 @@ class ArchiveDownloader:
         """
         # Intentamos obtener la duración total para elegir un punto de inicio aleatorio
         # Si no la tenemos, empezamos en el segundo 60 (evitar intros)
-        start_time = random.randint(60, 300) 
+        # Para Archive.org, a veces es mejor empezar más adelante para evitar intros largas
+        start_time = random.randint(120, 600) 
         
         start_str = time.strftime('%H:%M:%S', time.gmtime(start_time))
+        
+        logger.info(f"Descargando fragmento real de Archive.org ({duration}s) desde {start_str}...")
         
         cmd = [
             'ffmpeg', '-y',
             '-ss', start_str,
             '-t', str(duration),
             '-i', video_url,
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-            '-c:a', 'aac', '-strict', 'experimental',
+            '-c:v', 'libx264', 
+            '-preset', 'ultrafast', 
+            '-crf', '30', # Un poco más de compresión para velocidad
+            '-c:a', 'aac', 
+            '-strict', 'experimental',
             '-pix_fmt', 'yuv420p',
             '-movflags', '+faststart',
+            '-maxrate', '1.5M', 
+            '-bufsize', '3M',
             str(save_path)
         ]
         

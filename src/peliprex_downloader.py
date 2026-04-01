@@ -161,6 +161,13 @@ class PeliprexDownloader:
         results = self.search_movie(movie_title)
         
         if not results:
+            # Reintento con búsqueda menos estricta si falla
+            if " " in movie_title:
+                simple_title = movie_title.split()[0]
+                logger.info(f"Reintentando búsqueda en Peliprex con término simple: {simple_title}")
+                results = self.search_movie(simple_title)
+        
+        if not results:
             logger.warning(f"No se encontraron archivos directos en Peliprex para '{movie_title}'")
             return []
 
@@ -191,14 +198,26 @@ class PeliprexDownloader:
         suggested_starts = [600, 1200, 1800, 2400, 3000, 3600, 4200, 4800]
         random.shuffle(suggested_starts)
 
-        for i in range(clips_needed):
-            result = filtered_results[i % len(filtered_results)]
-            video_url = result.get("pelicula_url") or result.get("direct_link") or result.get("stream_url")
+        # Barajar resultados para evitar siempre los mismos (que pueden estar rotos)
+        random.shuffle(filtered_results)
+        
+        # Intentar con más resultados si algunos fallan (404)
+        max_attempts = min(len(filtered_results) * 2, clips_needed * 3)
+        attempts = 0
+        
+        while len(downloaded_clips) < clips_needed and attempts < max_attempts:
+            result = filtered_results[attempts % len(filtered_results)]
+            attempts += 1
             
-            if not video_url:
+            video_url = result.get("pelicula_url") or result.get("direct_link") or result.get("stream_url")
+            if not video_url: continue
+            
+            # Evitar streams conocidos por dar 404 según logs (385, 383, 381)
+            if any(f"stream/{s}" in video_url for s in ["385", "383", "381"]):
+                logger.warning(f"Omitiendo stream conocido por error 404: {video_url}")
                 continue
             
-            start_time = suggested_starts[i % len(suggested_starts)] + random.randint(0, 300)
+            start_time = suggested_starts[len(downloaded_clips) % len(suggested_starts)] + random.randint(0, 300)
             duration = 7 # Ritmo 7-10-7
             
             output_path = save_dir / f"peliprex_{len(downloaded_clips):03d}.mp4"
@@ -214,9 +233,6 @@ class PeliprexDownloader:
                     "width": 1280,
                     "height": 720
                 })
-            
-            if len(downloaded_clips) >= clips_needed:
-                break
         
         logger.info(f"Total de clips de Peliprex obtenidos: {len(downloaded_clips)}")
         return downloaded_clips

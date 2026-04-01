@@ -3,6 +3,8 @@ import os
 import requests
 from pathlib import Path
 from typing import Optional
+from PIL import Image
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +64,32 @@ class ThumbnailGenerator:
                 # Descargar la imagen generada
                 img_response = requests.get(image_url, timeout=30)
                 if img_response.status_code == 200:
-                    with open(output_path, "wb") as f:
-                        f.write(img_response.content)
-                    logger.info(f"Miniatura OpenAI generada exitosamente: {output_path}")
-                    return output_path
+                    # Comprimir la imagen para asegurar que pese menos de 2MB (límite de YouTube)
+                    try:
+                        img = Image.open(io.BytesIO(img_response.content))
+                        
+                        # Convertir a RGB si es necesario (DALL-E suele devolver PNG o WEBP que pueden ser RGBA)
+                        if img.mode in ("RGBA", "P"):
+                            img = img.convert("RGB")
+                        
+                        # Guardar con compresión progresiva
+                        quality = 85
+                        img.save(output_path, "JPEG", quality=quality, optimize=True)
+                        
+                        # Verificar tamaño y re-comprimir si es necesario
+                        file_size = os.path.getsize(output_path)
+                        while file_size > 2 * 1024 * 1024 and quality > 30:
+                            quality -= 10
+                            img.save(output_path, "JPEG", quality=quality, optimize=True)
+                            file_size = os.path.getsize(output_path)
+                            
+                        logger.info(f"Miniatura OpenAI generada y comprimida ({file_size/1024/1024:.2f}MB, calidad {quality}): {output_path}")
+                        return output_path
+                    except Exception as compress_err:
+                        logger.error(f"Error comprimiendo miniatura: {compress_err}. Guardando original...")
+                        with open(output_path, "wb") as f:
+                            f.write(img_response.content)
+                        return output_path
                 else:
                     logger.error(f"Error descargando la imagen de OpenAI: {img_response.status_code}")
             else:
