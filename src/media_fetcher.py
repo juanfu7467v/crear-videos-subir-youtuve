@@ -10,6 +10,7 @@ import requests
 from src.movie_clips_fetcher import MovieClipsFetcher
 from src.peliprex_downloader import PeliprexDownloader
 from src.archive_org_downloader import ArchiveOrgDownloader
+from src.archive_downloader import ArchiveDownloader
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class MediaFetcher:
         self.movie_clips_fetcher = MovieClipsFetcher()
         self.peliprex_downloader = PeliprexDownloader()
         self.archive_org_downloader = ArchiveOrgDownloader()
+        self.archive_smart_downloader = ArchiveDownloader()
         self.session     = requests.Session()
         self.session.headers.update({"User-Agent": "ElTioJota-AutoVideo/1.0"})
 
@@ -139,9 +141,19 @@ class MediaFetcher:
             if not stock_item and self.pixabay_key:
                 stock_item = self._fetch_pixabay_video(kw, save_dir, f"stock_{clip_index:03d}")
             
-            # Integración de Archive.org como fuente adicional
+            # Integración de Archive.org como fuente adicional (Búsqueda inteligente)
             if not stock_item:
-                logger.info(f"Ritmo 7-10-7: Buscando en Archive.org para '{kw}'")
+                logger.info(f"Ritmo 7-10-7: Buscando en Archive.org (Smart) para '{kw}'")
+                smart_clips = self.archive_smart_downloader.fetch_smart_clips(kw, save_dir, clips_needed=1)
+                if smart_clips:
+                    stock_item = smart_clips[0]
+                    # Renombrar para mantener el prefijo consistente
+                    new_path = save_dir / f"stock_{clip_index:03d}_archive_smart.mp4"
+                    os.rename(stock_item["path"], new_path)
+                    stock_item["path"] = str(new_path)
+
+            if not stock_item:
+                logger.info(f"Ritmo 7-10-7: Buscando en Archive.org (Legacy) para '{kw}'")
                 stock_item = self.archive_org_downloader.fetch_archive_org_video(kw, save_dir, f"stock_{clip_index:03d}")
 
             if not stock_item:
