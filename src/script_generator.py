@@ -60,7 +60,8 @@ class ScriptGenerator:
             "- IDIOMA: Español natural.\n"  
             "- KEYWORDS VISUALES: Para cada segmento, proporciona palabras clave en inglés que sean SIMPLES, VISUALES y CONCRETAS. "  
             "Pexels no entiende conceptos abstractos. Usa términos como: 'man thinking', 'city traffic', 'cinematic landscape', 'close up face', 'technology', 'dark room'. "  
-            "EVITA términos como 'paradox', 'spider-men', 'comic book' (si no son comunes en stock), 'fate', 'destiny'.\n"  
+            "EVITA términos como 'paradox', 'fate', 'destiny'.\n"  
+            "- BÚSQUEDA DE STOCK: Para Archive.org, usa SIEMPRE el nombre real de la película o tema central (ej. 'Rambo', 'The Godfather') para obtener clips relacionados. No uses términos genéricos como 'triste' o 'silueta' para esta fuente.\n"}]},path:  
             "- DURACIÓN: " + ("Máximo 55 segundos" if "short" in format_suggested else "Entre 3 y 5 minutos") + ".\n\n"  
             "INSTRUCCIÓN ESPECIAL PARA BÚSQUEDA DE CONTENIDO (PeliPREX):\n"  
             "Analiza profundamente el tema del video y extrae únicamente el nombre exacto del contenido principal (película, serie, personaje o tema central).\n"  

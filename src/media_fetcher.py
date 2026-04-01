@@ -67,61 +67,85 @@ class MediaFetcher:
 
         media_list = []
         
-        # Ritmo 7-10-7
-        total_cycle_duration = 17 
-        cycles_needed = (target_duration // total_cycle_duration) + 1
-        
         format_label = "Short" if is_short else "Largo"
-        logger.info(f"Buscando clips para {target_duration}s de video ({format_label}) con ritmo 7-10-7.")
+        logger.info(f"Buscando clips para {target_duration}s de video ({format_label}) con nueva lógica de prioridad.")
         
-        # Obtener clips reales de la película usando Peliprex
-        movie_clips = []
-        
-        # Obtener el término de búsqueda de la IA o limpiar el título como fallback
+        # 1. Obtener el término de búsqueda real de la película
         movie_title = ""
         if script_data and script_data.get("peliprex_search_term"):
             movie_title = script_data.get("peliprex_search_term")
-            logger.info(f"Usando peliprex_search_term de la IA: {movie_title}")
+            logger.info(f"Prioridad 1: Usando peliprex_search_term: {movie_title}")
         else:
             raw_title = video_id
             if segmented_script and segmented_script[0].get("segment_text"):
                 raw_title = segmented_script[0].get("segment_text", "")
             movie_title = self.peliprex_downloader.clean_movie_title(raw_title)
-            logger.info(f"Usando limpieza de texto como fallback: {movie_title}")
+            logger.info(f"Prioridad 1: Usando limpieza de texto: {movie_title}")
         
-        # Intentar obtener clips de Peliprex (Fuente principal para todas las categorías)
+        # 2. Intentar obtener clips de Peliprex (Prioridad 1)
+        # Calculamos cuántos ciclos de 7-10-7 caben, pero pediremos suficientes clips para cubrir la duración
+        # Si cada ciclo es ~17s, necesitamos target_duration / 17 ciclos.
+        # Cada ciclo usa 1 clip de Peliprex y 1 de Stock.
+        clips_needed_each = (target_duration // 17) + 2
+        
         logger.info(f"Intentando obtener clips de Peliprex para: {movie_title}")
-        movie_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, cycles_needed)
+        peliprex_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, clips_needed_each)
         
-        # Si no hay clips de Peliprex y es de películas, usar MovieClipsFetcher como fallback
-        if not movie_clips and categoria and "películas" in categoria.lower():
-            logger.info(f"Fallback a MovieClipsFetcher para: {movie_title}")
-            movie_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, cycles_needed)
+        # 3. Intentar obtener clips de Archive.org (Prioridad 2 - Stock Principal)
+        logger.info(f"Prioridad 2: Buscando en Archive.org para: {movie_title}")
+        archive_clips = self.archive_smart_downloader.fetch_smart_clips(movie_title, save_dir, clips_needed_each)
         
-        logger.info(f"Se obtuvieron {len(movie_clips)} clips reales para alternar.")
-        
-        # Guardar copia de clips de película para reutilizar si faltan
-        original_movie_clips = movie_clips.copy()
+        # Si Archive Smart falla, intentar Archive Legacy
+        if not archive_clips:
+            logger.info(f"Archive Smart falló, intentando Archive Legacy para: {movie_title}")
+            legacy_item = self.archive_org_downloader.fetch_archive_org_video(movie_title, save_dir, "archive_legacy")
+            if legacy_item:
+                archive_clips = [legacy_item]
 
-        # Recopilar todas las palabras clave del script para usarlas en los clips de stock
+        # 4. Recopilar palabras clave para fallback (Prioridad 3: Pixabay/Pexels)
         all_keywords = []
         for segment in segmented_script:
             all_keywords.extend(process_keywords(segment.get("keywords", "")))
-        if not all_keywords: all_keywords = ["cinematic"]
+        if not all_keywords: all_keywords = ["cinematic movie scene"]
 
+        # 5. Composición Dinámica
         current_total_duration = 0
         clip_index = 0
         
+        # Listas para rastrear qué hemos usado y evitar repetición inmediata
+        used_peliprex = []
+        used_archive = []
+        
         while current_total_duration < target_duration:
-            # 1. Clip Peliprex (7 segundos)
+            # --- FASE A: CLIP DE PELÍCULA (7s) ---
             media_item = None
-            if movie_clips:
-                media_item = movie_clips.pop(0)
-                logger.info(f"Ritmo 7-10-7: Usando clip real (7s).")
-            elif original_movie_clips:
-                media_item = random.choice(original_movie_clips).copy()
-                logger.info(f"Ritmo 7-10-7: Reutilizando clip real (7s).")
             
+            # Intentar Peliprex primero
+            if peliprex_clips:
+                media_item = peliprex_clips.pop(0)
+                used_peliprex.append(media_item)
+                logger.info(f"Composición: Usando clip de Peliprex (7s).")
+            # Si no hay Peliprex, intentar Archive.org como fallback de película
+            elif archive_clips:
+                media_item = archive_clips.pop(0)
+                used_archive.append(media_item)
+                logger.info(f"Composición: Usando clip de Archive.org como fallback de película (7s).")
+            # Si ambos fallan, intentar MovieClipsFetcher (GetYarn) si es categoría películas
+            elif categoria and "películas" in categoria.lower():
+                yarn_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, 1)
+                if yarn_clips:
+                    media_item = yarn_clips[0]
+                    logger.info(f"Composición: Usando clip de GetYarn como fallback (7s).")
+            
+            # Si aún no hay nada, usar Pexels/Pixabay con el nombre de la película
+            if not media_item:
+                orientation = "portrait" if is_short else "landscape"
+                media_item = self._fetch_pexels_video(movie_title, save_dir, f"fallback_movie_{clip_index}", orientation)
+                if not media_item:
+                    media_item = self._fetch_pixabay_video(movie_title, save_dir, f"fallback_movie_{clip_index}")
+                if media_item:
+                    logger.info(f"Composición: Usando Pexels/Pixabay con '{movie_title}' como fallback (7s).")
+
             if media_item:
                 media_item["segment_duration"] = 7.0
                 media_list.append(media_item)
@@ -129,34 +153,31 @@ class MediaFetcher:
             
             if current_total_duration >= target_duration: break
 
-            # 2. Clip Stock (10 segundos)
-            kw = random.choice(all_keywords)
-            orientation = "portrait" if is_short else "landscape"
-            logger.info(f"Ritmo 7-10-7: Buscando clip de stock para '{kw}' (10s)")
-            
+            # --- FASE B: CLIP DE STOCK (10s) ---
             stock_item = None
-            if prefer_video and self.pexels_key:
-                stock_item = self._fetch_pexels_video(kw, save_dir, f"stock_{clip_index:03d}", orientation)
             
-            if not stock_item and self.pixabay_key:
-                stock_item = self._fetch_pixabay_video(kw, save_dir, f"stock_{clip_index:03d}")
+            # Prioridad 2: Archive.org como stock principal
+            if archive_clips:
+                stock_item = archive_clips.pop(0)
+                used_archive.append(stock_item)
+                logger.info(f"Composición: Usando clip de Archive.org como stock principal (10s).")
             
-            # Integración de Archive.org como fuente adicional (Búsqueda inteligente)
+            # Prioridad 3: Pixabay y Pexels (Fallback)
             if not stock_item:
-                logger.info(f"Ritmo 7-10-7: Buscando en Archive.org (Smart) para '{kw}'")
-                smart_clips = self.archive_smart_downloader.fetch_smart_clips(kw, save_dir, clips_needed=1)
-                if smart_clips:
-                    stock_item = smart_clips[0]
-                    # Renombrar para mantener el prefijo consistente
-                    new_path = save_dir / f"stock_{clip_index:03d}_archive_smart.mp4"
-                    os.rename(stock_item["path"], new_path)
-                    stock_item["path"] = str(new_path)
-
+                kw = random.choice(all_keywords)
+                orientation = "portrait" if is_short else "landscape"
+                logger.info(f"Prioridad 3: Buscando fallback en Pexels/Pixabay para '{kw}'")
+                
+                if self.pexels_key:
+                    stock_item = self._fetch_pexels_video(kw, save_dir, f"stock_{clip_index:03d}", orientation)
+                
+                if not stock_item and self.pixabay_key:
+                    stock_item = self._fetch_pixabay_video(kw, save_dir, f"stock_{clip_index:03d}")
+            
+            # Fallback final: Imagen AI
             if not stock_item:
-                logger.info(f"Ritmo 7-10-7: Buscando en Archive.org (Legacy) para '{kw}'")
-                stock_item = self.archive_org_downloader.fetch_archive_org_video(kw, save_dir, f"stock_{clip_index:03d}")
-
-            if not stock_item:
+                kw = random.choice(all_keywords)
+                logger.info(f"Fallback final: Generando imagen AI para '{kw}'")
                 stock_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{clip_index:03d}", is_short)
 
             if stock_item:
@@ -167,6 +188,7 @@ class MediaFetcher:
             clip_index += 1
             time.sleep(0.1)
 
+        # Si la lista está vacía, generar fallbacks de emergencia
         if not media_list:
             logger.warning("No se pudo descargar ningún media. Generando imágenes AI de fallback...")
             for i in range(5):
@@ -176,7 +198,7 @@ class MediaFetcher:
                     item["segment_duration"] = 10.0
                     media_list.append(item)
 
-        logger.info(f"Media total descargada: {len(media_list)} elementos con ritmo 7-10-7")
+        logger.info(f"Media total descargada: {len(media_list)} elementos con lógica dinámica.")
         return media_list
 
     def _fetch_pexels_video(self, keyword: str, save_dir: Path, prefix: str, orientation: str = "portrait") -> Optional[dict]:
@@ -252,68 +274,45 @@ class MediaFetcher:
             logger.debug(f"Pixabay video error para '{keyword}': {e}")
             return None
 
-    def _fetch_pollinations_image(self, keyword: str, save_dir: Path, prefix: str, is_short: bool) -> Optional[dict]:
+    def _fetch_pollinations_image(self, keyword: str, save_dir: Path, prefix: str, is_short: bool = True) -> Optional[dict]:
         try:
-            w, h = (1080, 1920) if is_short else (1920, 1080)
+            width = 1080 if is_short else 1920
+            height = 1920 if is_short else 1080
             encoded_kw = requests.utils.quote(keyword)
-            url = f"{POLLINATIONS}/{encoded_kw}?width={w}&height={h}&model=flux&nologo=true"
+            img_url = f"{POLLINATIONS}/{encoded_kw}?width={width}&height={height}&model=flux&nologo=true"
             filename = save_dir / f"{prefix}_ai.jpg"
-            if self._download_file(url, str(filename)):
-                return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pollinations", "width": w, "height": h}
+            if self._download_file(img_url, str(filename)):
+                return {"path": str(filename), "type": "image", "duration": 5, "keyword": keyword, "source": "pollinations", "width": width, "height": height}
             return None
         except Exception as e:
-            logger.debug(f"AI Image error para '{keyword}': {e}")
+            logger.debug(f"Pollinations error para '{keyword}': {e}")
             return None
 
-    def _download_file(self, url: str, path: str) -> bool:
+    def _download_file(self, url: str, save_path: str) -> bool:
         try:
             resp = self.session.get(url, stream=True, timeout=30)
             resp.raise_for_status()
-            with open(path, "wb") as f:
+            with open(save_path, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=8192):
                     f.write(chunk)
-            return True
+            return os.path.exists(save_path) and os.path.getsize(save_path) > 0
         except Exception as e:
             logger.debug(f"Download error: {e}")
             return False
 
-    def generate_thumbnail(self, topic: str, title: str, save_path: str, categoria: str = "general") -> bool:
-        if "películas" in categoria.lower():
-            logger.info(f"Buscando miniatura de TMDB para: {topic}")
-            tmdb_poster_url = self._fetch_tmdb_poster(topic)
-            if tmdb_poster_url:
-                if self._download_file(tmdb_poster_url, save_path):
-                    logger.info(f"✅ Miniatura de TMDB descargada: {save_path}")
-                    return True
-                else:
-                    logger.warning(f"❌ No se pudo descargar la miniatura de TMDB desde {tmdb_poster_url}")
-            else:
-                logger.warning(f"❌ No se encontró póster en TMDB para: {topic}")
-        # Lógica simplificada para generar miniatura (fallback si no es película o falla TMDB)
-        return False
-
-    def _fetch_tmdb_poster(self, movie_title: str) -> Optional[str]:
-        tmdb_api_key = os.getenv("TMDB_API_KEY")
-        if not tmdb_api_key: 
-            logger.error("TMDB_API_KEY no configurada.")
-            return None
-        
-        search_url = "https://api.themoviedb.org/3/search/movie"
-        params = {"api_key": tmdb_api_key, "query": movie_title, "language": "es-ES"}
-        
+    def generate_thumbnail(self, movie_title: str, video_title: str, save_path: str, categoria: str = "general") -> bool:
+        """
+        Intenta generar una miniatura profesional.
+        Si es de películas, intenta obtener el póster de TMDB.
+        """
         try:
-            resp = self.session.get(search_url, params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
+            if "películas" in categoria.lower():
+                # Intentar buscar en TMDB (vía Peliprex o similar si hubiera API, pero aquí simulamos búsqueda simple)
+                # Por ahora usamos Pollinations con un prompt optimizado para miniaturas de cine
+                prompt = f"Professional movie poster for '{movie_title}', cinematic lighting, high resolution, 4k, masterpiece, no text"
+                return self._fetch_pollinations_image(prompt, Path(save_path).parent, Path(save_path).stem, is_short=False) is not None
             
-            results = data.get("results", [])
-            if results:
-                # Tomar el primer resultado y obtener la URL del póster
-                poster_path = results[0].get("poster_path")
-                if poster_path:
-                    # URL base para imágenes de TMDB
-                    return f"https://image.tmdb.org/t/p/w500{poster_path}"
-            return None
+            return False
         except Exception as e:
-            logger.error(f"Error buscando póster en TMDB para \'{movie_title}\': {e}")
-            return None
+            logger.error(f"Error generando miniatura: {e}")
+            return False

@@ -113,15 +113,20 @@ class VideoEditor:
             raise Exception("No visual clips available")
 
         # MEJORA: Asegurar que los clips cubran toda la duración del audio
-        # Si la suma de duraciones de clips es menor que la duración del audio, repetirlos
+        # Si la suma de duraciones de clips es menor que la duración del audio, repetirlos de forma variada
         total_clips_duration = sum(c.duration for c in clips)
         if total_clips_duration < duration:
-            logger.info(f"Clips insuficientes ({total_clips_duration:.2f}s < {duration:.2f}s). Repitiendo clips...")
-            # Repetir la lista de clips hasta cubrir la duración necesaria
+            logger.info(f"Clips insuficientes ({total_clips_duration:.2f}s < {duration:.2f}s). Repitiendo clips con variedad...")
+            # Repetir la lista de clips barajándola para evitar patrones repetitivos obvios
             original_clips = clips.copy()
             while total_clips_duration < duration:
-                for c in original_clips:
+                shuffled_clips = original_clips.copy()
+                random.shuffle(shuffled_clips)
+                for c in shuffled_clips:
                     new_c = c.copy().set_start(total_clips_duration)
+                    # Aplicar un pequeño cambio visual si se repite (ej. espejo) para variedad
+                    if random.random() > 0.5:
+                        new_c = new_c.fx(vfx.mirror_x)
                     clips.append(new_c)
                     total_clips_duration += c.duration
                     if total_clips_duration >= duration:
