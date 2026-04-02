@@ -1,33 +1,27 @@
-import json  
-import logging  
-import re  
-import requests  
-import os  
-import time  
-  
-logger = logging.getLogger(__name__)  
-  
-class ScriptGenerator:  
-    def __init__(self, api_key: str):  
-        self.api_key = api_key.strip()  
-        self.model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")  
-        self.url = (  
-            f"https://generativelanguage.googleapis.com/v1beta/models/"  
-            f"{self.model}:generateContent?key={self.api_key}"  
-        )  
-  
-    def generate_full_script(self, trend_data: dict) -> dict:  
-        topic = trend_data.get('tema_recomendado') or trend_data.get('topic', 'curiosidades')  
-        canal = trend_data.get('canal', 'El Tío Jota')  
-        categoria = trend_data.get('categoria', 'general').lower()  
-        user_prompt_ia = trend_data.get('prompt_ia')  
-        format_suggested = trend_data.get('formato_sugerido', 'Short').lower()  
-          
-        if "Criterio" in canal or "películas" in categoria:  
-            estilo_base = "emocional, intrigante, directo, con un inicio impactante y frases cortas tipo TikTok. Genera curiosidad constante y evita el lenguaje académico. Habla directamente al espectador."  
-            voz = "es-MX-JorgeNeural"  
-        else:  
-            estilo_base = "emocional, intrigante, directo, con un inicio impactante y frases cortas tipo TikTok. Genera curiosidad constante y evita el lenguaje académico. Habla directamente al espectador."  
+import os
+import json
+import time
+import requests
+from typing import Dict, Any, Optional
+
+class ScriptGenerator:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.api_url = "https://api.openai.com/v1/chat/completions"
+
+    def generate_script(self, topic: str, canal: str, categoria: str, format_suggested: str, estilo_base: str, user_prompt_ia: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Genera un guion optimizado para YouTube utilizando la API de OpenAI.
+        """
+        
+        # Selección de voz basada en el canal
+        if canal == "PeliPREX":
+            voz = "es-MX-JorgeNeural"
+        elif canal == "PeliPREX-Series":
+            voz = "es-MX-DaliaNeural"
+        elif canal == "PeliPREX-Shorts":
+            voz = "es-MX-LarissaNeural"
+        else:
             voz = "es-MX-DaliaNeural"  
   
         base_instruction = user_prompt_ia if user_prompt_ia else (  
@@ -61,7 +55,7 @@ class ScriptGenerator:
             "- KEYWORDS VISUALES: Para cada segmento, proporciona palabras clave en inglés que sean SIMPLES, VISUALES y CONCRETAS. "  
             "Pexels no entiende conceptos abstractos. Usa términos como: 'man thinking', 'city traffic', 'cinematic landscape', 'close up face', 'technology', 'dark room'. "  
             "EVITA términos como 'paradox', 'fate', 'destiny'.\n"  
-            "- BÚSQUEDA DE STOCK: Para Archive.org, usa SIEMPRE el nombre real de la película o tema central (ej. 'Rambo', 'The Godfather') para obtener clips relacionados. No uses términos genéricos como 'triste' o 'silueta' para esta fuente.\n"}]},path:  
+            "- BÚSQUEDA DE STOCK: Para Archive.org, usa SIEMPRE el nombre real de la película o tema central (ej. 'Rambo', 'The Godfather') para obtener clips relacionados. No uses términos genéricos como 'triste' o 'silueta' para esta fuente.\n"  
             "- DURACIÓN: " + ("Máximo 55 segundos" if "short" in format_suggested else "Entre 3 y 5 minutos") + ".\n\n"  
             "INSTRUCCIÓN ESPECIAL PARA BÚSQUEDA DE CONTENIDO (PeliPREX):\n"  
             "Analiza profundamente el tema del video y extrae únicamente el nombre exacto del contenido principal (película, serie, personaje o tema central).\n"  
@@ -81,40 +75,31 @@ class ScriptGenerator:
   
         for attempt in range(max_retries):  
             try:  
-                logger.info(f"Intento {attempt + 1}/{max_retries} de generación de guion...")  
-                payload = {  
-                    "contents": [{"parts": [{"text": prompt}]}],  
-                    "generationConfig": {"response_mime_type": "application/json"}  
+                headers = {  
+                    "Content-Type": "application/json",  
+                    "Authorization": f"Bearer {self.api_key}"  
                 }  
-                  
-                response = requests.post(self.url, json=payload, timeout=timeout_seconds)  
-                  
-                if response.status_code != 200:  
-                    logger.error(f"Error API {response.status_code}: {response.text}")  
-                    if response.status_code in [429, 500, 502, 503, 504]:  
-                        time.sleep(retry_delay * (attempt + 1))  
-                        continue  
-                    return None  
   
-                data = response.json()  
-                text_response = data['candidates'][0]['content']['parts'][0]['text']  
-                  
-                raw = re.search(r'\{.*\}', text_response, re.DOTALL)  
-                data = json.loads(raw.group(0)) if raw else json.loads(text_response)  
+                data = {  
+                    "model": "gpt-4-turbo-preview",  
+                    "messages": [  
+                        {"role": "system", "content": "Eres un experto en guiones virales para YouTube. Responde siempre en formato JSON."},  
+                        {"role": "user", "content": prompt}  
+                    ],  
+                    "response_format": {"type": "json_object"},  
+                    "temperature": 0.7  
+                }  
   
-                if 'full_script' in data:  
-                    real_name = "El Tío Jota"  
-                    if canal and "Criterio" in canal:  
-                        real_name = "El Criterio"  
-                      
-                    data['full_script'] = data['full_script'].replace("CHANNEL_NAME_2", real_name)  
-                    data['full_script'] = data['full_script'].replace("CHANNEL_NAME", real_name)  
+                response = requests.post(self.api_url, headers=headers, json=data, timeout=timeout_seconds)  
+                response.raise_for_status()  
                   
-                return data  
-                  
+                result = response.json()  
+                content = result['choices'][0]['message']['content']  
+                return json.loads(content)  
+  
             except Exception as e:  
-                logger.error(f"Error en intento {attempt + 1}: {e}")  
-                time.sleep(retry_delay)  
-  
-        return None  
-  
+                print(f"Error en intento {attempt + 1}: {e}")  
+                if attempt < max_retries - 1:  
+                    time.sleep(retry_delay)  
+                else:  
+                    raise Exception(f"No se pudo generar el guion después de {max_retries} intentos: {e}")
