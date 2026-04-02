@@ -9,11 +9,18 @@ class ScriptGenerator:
         self.api_key = api_key
         self.api_url = "https://api.openai.com/v1/chat/completions"
 
-    def generate_script(self, topic: str, canal: str, categoria: str, format_suggested: str, estilo_base: str, user_prompt_ia: Optional[str] = None) -> Dict[str, Any]:
+    def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Genera un guion optimizado para YouTube utilizando la API de OpenAI.
+        Recibe un diccionario con los datos necesarios.
         """
-        
+        topic = input_data.get('tema_recomendado', 'Sin tema')
+        canal = input_data.get('canal', 'CHANNEL_NAME')
+        categoria = input_data.get('categoria', 'general')
+        format_suggested = input_data.get('formato_sugerido', 'Short')
+        estilo_base = input_data.get('idea_contenido', 'Emocional y directo')
+        user_prompt_ia = input_data.get('prompt_ia')
+
         # Selección de voz basada en el canal
         if canal == "PeliPREX":
             voz = "es-MX-JorgeNeural"
