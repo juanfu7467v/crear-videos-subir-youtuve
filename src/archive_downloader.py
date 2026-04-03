@@ -146,17 +146,46 @@ class ArchiveDownloader:
         except: pass
         return 60.0
 
+    def _is_frame_bright_enough(self, video_url: str, start_time: int) -> bool:
+        """Verifica si el frame en start_time tiene suficiente brillo."""
+        start_str = time.strftime('%H:%M:%S', time.gmtime(start_time))
+        # Extraer un solo frame y calcular su brillo promedio usando ffprobe/ffmpeg
+        # Usamos un método rápido: extraer el valor de luminancia promedio (Y)
+        cmd = [
+            'ffmpeg', '-y', '-ss', start_str, '-i', video_url,
+            '-vframes', '1', '-vf', 'format=yuv420p,select=eq(n\,0),showinfo',
+            '-f', 'null', '-'
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            # Buscar el valor medio de luminancia en la salida de showinfo
+            # Ejemplo: [Parsed_showinfo_1 @ 0x...] n:   0 pts:      0 pts_time:0 ... mean:[128 128 128]
+            match = re.search(r'mean:\[(\d+)', result.stderr)
+            if match:
+                brightness = int(match.group(1))
+                logger.info(f"Brillo detectado en {start_str}: {brightness}")
+                return brightness > 25 # Umbral para considerar que no es negro
+            return True # Si falla el análisis, asumimos que está bien
+        except:
+            return True
+
     def download_fragment(self, video_url: str, save_path: Path, duration: int = 10) -> bool:
         """
         Descarga un fragmento aleatorio del video para evitar repeticiones.
         """
-        # Intentamos obtener la duración total para elegir un punto de inicio aleatorio
-        # Si no la tenemos, empezamos en el segundo 60 (evitar intros)
-        # Para Archive.org, a veces es mejor empezar más adelante para evitar intros largas
-        start_time = random.randint(120, 600) 
+        # MEJORA: Empezar mínimo en el segundo 30 y validar brillo
+        base_start = random.randint(30, 600)
         
-        start_str = time.strftime('%H:%M:%S', time.gmtime(start_time))
-        
+        # Validación inteligente de brillo
+        max_jumps = 5
+        current_start = base_start
+        for _ in range(max_jumps):
+            if self._is_frame_bright_enough(video_url, current_start):
+                break
+            logger.info(f"Frame oscuro detectado en {current_start}s, saltando 5s...")
+            current_start += 5
+            
+        start_str = time.strftime('%H:%M:%S', time.gmtime(current_start))
         logger.info(f"Descargando fragmento real de Archive.org ({duration}s) desde {start_str}...")
         
         cmd = [
@@ -166,7 +195,7 @@ class ArchiveDownloader:
             '-i', video_url,
             '-c:v', 'libx264', 
             '-preset', 'ultrafast', 
-            '-crf', '30', # Un poco más de compresión para velocidad
+            '-crf', '30',
             '-c:a', 'aac', 
             '-strict', 'experimental',
             '-pix_fmt', 'yuv420p',
@@ -177,7 +206,6 @@ class ArchiveDownloader:
         ]
         
         try:
-            # Timeout de 2 minutos para Archive.org (puede ser lento)
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             if result.returncode == 0 and save_path.exists() and save_path.stat().st_size > 5000:
                 return True

@@ -91,15 +91,43 @@ class PeliprexDownloader:
             logger.error(f"Error buscando en Peliprex API: {e}")
             return []
 
+    def _is_frame_bright_enough(self, video_url: str, start_time: int) -> bool:
+        """Verifica si el frame en start_time tiene suficiente brillo."""
+        start_str = time.strftime('%H:%M:%S', time.gmtime(start_time))
+        cmd = [
+            'ffmpeg', '-y', '-ss', start_str, '-i', video_url,
+            '-vframes', '1', '-vf', 'format=yuv420p,select=eq(n\,0),showinfo',
+            '-f', 'null', '-'
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            match = re.search(r'mean:\[(\d+)', result.stderr)
+            if match:
+                brightness = int(match.group(1))
+                logger.info(f"Brillo detectado en {start_str}: {brightness}")
+                return brightness > 25
+            return True
+        except:
+            return True
+
     def download_fragment(self, video_url: str, save_path: Path, start_time: int, duration: int) -> bool:
         """Descarga un fragmento corto del video usando ffmpeg directamente desde la URL."""
         if any(yt in video_url for yt in ["youtube.com", "youtu.be", "googlevideo.com"]):
             logger.warning(f"Omitiendo enlace de YouTube detectado en descarga: {video_url}")
             return False
 
+        # Validación inteligente de brillo
+        max_jumps = 5
+        current_start = max(30, start_time) # Asegurar mínimo segundo 30
+        for _ in range(max_jumps):
+            if self._is_frame_bright_enough(video_url, current_start):
+                break
+            logger.info(f"Frame oscuro detectado en {current_start}s, saltando 5s...")
+            current_start += 5
+
         # Formatear tiempo para ffmpeg (HH:MM:SS)
-        start_str = time.strftime('%H:%M:%S', time.gmtime(start_time))
-        end_time = start_time + duration
+        start_str = time.strftime('%H:%M:%S', time.gmtime(current_start))
+        end_time = current_start + duration
         end_str = time.strftime('%H:%M:%S', time.gmtime(end_time))
         
         logger.info(f"Descargando fragmento de {duration}s desde {start_str} hasta {end_str}...")
