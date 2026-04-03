@@ -40,7 +40,7 @@ class QualityChecker:
         self.min_score = int(os.getenv("MIN_QC_SCORE", "60"))
         # Usando el modelo gemini-2.5-flash que es el nuevo estándar
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
-        # Inicializar el generador de miniaturas de OpenAI
+        # Inicializar el generador de miniaturas de OpenAI (único uso de OpenAI solicitado)
         self.thumbnail_generator = ThumbnailGenerator(os.getenv("OPENAI_API_KEY"))
 
     def _analyze_frame(self, frame_path: str) -> Optional[dict]:

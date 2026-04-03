@@ -2,16 +2,18 @@ import os
 import json
 import time
 import requests
+import re
 from typing import Dict, Any, Optional
 
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.api_url = "https://api.openai.com/v1/chat/completions"
+        # Usando el modelo gemini-2.5-flash que es el nuevo estándar
+        self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Genera un guion optimizado para YouTube utilizando la API de OpenAI.
+        Genera un guion optimizado para YouTube utilizando la API de Gemini.
         Recibe un diccionario con los datos necesarios.
         """
         topic = input_data.get('tema_recomendado', 'Sin tema')
@@ -82,27 +84,34 @@ class ScriptGenerator:
   
         for attempt in range(max_retries):  
             try:  
-                headers = {  
-                    "Content-Type": "application/json",  
-                    "Authorization": f"Bearer {self.api_key}"  
-                }  
+                headers = {"Content-Type": "application/json"}
+                
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": prompt}
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "response_mime_type": "application/json"
+                    }
+                }
   
-                data = {  
-                    "model": "gpt-4-turbo-preview",  
-                    "messages": [  
-                        {"role": "system", "content": "Eres un experto en guiones virales para YouTube. Responde siempre en formato JSON."},  
-                        {"role": "user", "content": prompt}  
-                    ],  
-                    "response_format": {"type": "json_object"},  
-                    "temperature": 0.7  
-                }  
-  
-                response = requests.post(self.api_url, headers=headers, json=data, timeout=timeout_seconds)  
+                response = requests.post(self.api_url, headers=headers, json=payload, timeout=timeout_seconds)  
                 response.raise_for_status()  
                   
-                result = response.json()  
-                content = result['choices'][0]['message']['content']  
-                return json.loads(content)  
+                data = response.json()
+                
+                if 'candidates' in data and len(data['candidates']) > 0:
+                    text_response = data['candidates'][0]['content']['parts'][0]['text']
+                    raw = text_response.strip()
+                    # Limpiar posibles etiquetas markdown
+                    raw = re.sub(r'```json\s*|\s*```', '', raw)
+                    return json.loads(raw)
+                else:
+                    raise Exception(f"Respuesta inesperada de Gemini: {data}")
   
             except Exception as e:  
                 print(f"Error en intento {attempt + 1}: {e}")  
