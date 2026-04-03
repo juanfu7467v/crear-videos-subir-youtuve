@@ -108,6 +108,15 @@ class MediaFetcher:
             all_keywords.extend(process_keywords(segment.get("keywords", "")))
         if not all_keywords: all_keywords = ["cinematic movie scene"]
 
+        # 5. Validación de Material Relevante (Mejora solicitada)
+        # Si es categoría películas y no hay material en Peliprex ni en Archive con coincidencia casi exacta,
+        # detenemos el proceso para evitar crear un video con imágenes irrelevantes.
+        if categoria and "películas" in categoria.lower():
+            if not peliprex_clips and not archive_clips:
+                logger.error(f"❌ ERROR: No se encontró material exacto en Peliprex ni en Archive para '{movie_title}'.")
+                logger.error("Deteniendo el proceso para evitar contenido irrelevante.")
+                return []
+
         # 5. Composición Dinámica
         current_total_duration = 0
         clip_index = 0

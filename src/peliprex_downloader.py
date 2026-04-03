@@ -169,8 +169,12 @@ class PeliprexDownloader:
 
     def _normalize_text(self, text: str) -> str:
         """Normaliza el texto para comparaciones."""
+        if not text: return ""
         text = text.lower()
         text = text.replace("-", " ")
+        # Eliminar acentos y caracteres especiales comunes
+        import unicodedata
+        text = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
         text = re.sub(r'[^a-z0-9\s]', '', text)
         return text.strip()
 
@@ -178,46 +182,43 @@ class PeliprexDownloader:
         """Genera el enlace de Peliprex para una película dada."""
         if not movie_name:
             return ""
-        # Codificar el nombre de la película para la URL
-        encoded_movie_name = requests.utils.quote(movie_name)
-        return f"https://masitaprex.com/PeliPREX?movie={encoded_movie_name}"
+        # El nombre de la película debe ir tal cual se buscó, pero formateado para URL
+        # Según el ejemplo: https://masitaprex.com/PeliPREX?movie=rambo
+        # Usamos el nombre en minúsculas y sin espacios extras
+        clean_name = movie_name.strip().lower()
+        return f"https://masitaprex.com/PeliPREX?movie={clean_name}"
 
     def fetch_movie_clips(self, movie_title: str, save_dir: Path, clips_needed: int = 3) -> List[Dict]:
-        """Busca y descarga varios clips cortos de una película en Peliprex con filtrado inteligente."""
+        """Busca y descarga varios clips cortos de una película en Peliprex con búsqueda exacta."""
         normalized_query = self._normalize_text(movie_title)
         
+        # Búsqueda exacta en Peliprex
         results = self.search_movie(movie_title)
         
         if not results:
-            # Reintento con búsqueda menos estricta si falla
-            if " " in movie_title:
-                simple_title = movie_title.split()[0]
-                logger.info(f"Reintentando búsqueda en Peliprex con término simple: {simple_title}")
-                results = self.search_movie(simple_title)
-        
-        if not results:
-            logger.warning(f"No se encontraron archivos directos en Peliprex para '{movie_title}'")
+            logger.warning(f"No se encontraron archivos directos en Peliprex para la búsqueda exacta: '{movie_title}'")
             return []
 
-        # Filtrado de títulos que coinciden con lo buscado
+        # Filtrado estricto de títulos
         filtered_results = []
         for res in results:
             res_title = res.get('titulo', '')
             normalized_res_title = self._normalize_text(res_title)
             
-            if normalized_query in normalized_res_title or normalized_res_title in normalized_query:
+            # Coincidencia casi exacta: el query debe estar contenido o ser igual al título normalizado
+            # O el título debe contener todas las palabras del query en orden
+            if normalized_query == normalized_res_title or normalized_query in normalized_res_title:
                 filtered_results.append(res)
-                logger.info(f"Coincidencia encontrada: '{res_title}'")
+                logger.info(f"Coincidencia exacta/fuerte encontrada: '{res_title}'")
             else:
-                query_words = set(normalized_query.split())
-                title_words = set(normalized_res_title.split())
-                common_words = query_words.intersection(title_words)
-                if len(common_words) >= len(query_words) * 0.5:
+                # Verificación adicional: si el título contiene todas las palabras clave
+                query_words = normalized_query.split()
+                if all(word in normalized_res_title for word in query_words):
                     filtered_results.append(res)
-                    logger.info(f"Coincidencia parcial aceptada: '{res_title}'")
+                    logger.info(f"Coincidencia por palabras clave aceptada: '{res_title}'")
 
         if not filtered_results:
-            logger.warning(f"No se encontraron coincidencias satisfactorias para '{movie_title}'.")
+            logger.warning(f"No se encontraron coincidencias exactas para '{movie_title}' en los resultados de Peliprex.")
             return []
 
         logger.info(f"Total de películas coincidentes con archivos directos: {len(filtered_results)}")

@@ -28,6 +28,16 @@ class ArchiveDownloader:
             "moviesandfilms", "silent_films"
         ]
 
+    def _normalize_text(self, text: str) -> str:
+        """Normaliza el texto para comparaciones."""
+        if not text: return ""
+        text = text.lower()
+        text = text.replace("-", " ")
+        import unicodedata
+        text = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+        text = re.sub(r'[^a-z0-9\s]', '', text)
+        return text.strip()
+
     def search_by_metadata(self, query: str, limit: int = 10) -> List[Dict]:
         """
         Realiza una búsqueda avanzada combinando palabras clave y metadatos.
@@ -58,18 +68,28 @@ class ArchiveDownloader:
             
             docs = data.get("response", {}).get("docs", [])
             
-            # Si no hay resultados, intentar una búsqueda más relajada (palabras sueltas)
-            if not docs and " " in clean_query:
-                words = clean_query.split()
-                # Usar las 2 palabras más largas (suelen ser las más descriptivas)
-                words.sort(key=len, reverse=True)
-                simple_query = " OR ".join(words[:2])
-                params["q"] = f'({simple_query}) AND mediatype:movies'
-                logger.info(f"Reintentando búsqueda relajada en Archive.org: {simple_query}")
-                resp = self.session.get(self.base_search_url, params=params, timeout=20)
-                docs = resp.json().get("response", {}).get("docs", [])
-
-            return docs
+            # Filtrado estricto de resultados
+            normalized_query = self._normalize_text(query)
+            filtered_docs = []
+            for doc in docs:
+                doc_title = doc.get('title', '')
+                normalized_doc_title = self._normalize_text(doc_title)
+                
+                # Coincidencia casi exacta
+                if normalized_query in normalized_doc_title or normalized_doc_title in normalized_query:
+                    filtered_docs.append(doc)
+                else:
+                    # Verificación por palabras clave
+                    query_words = normalized_query.split()
+                    if all(word in normalized_doc_title for word in query_words):
+                        filtered_docs.append(doc)
+            
+            if filtered_docs:
+                logger.info(f"Encontrados {len(filtered_docs)} resultados con coincidencia casi exacta en Archive.org")
+                return filtered_docs
+            
+            logger.warning(f"No se encontraron coincidencias exactas en Archive.org para '{query}'")
+            return []
 
         except Exception as e:
             logger.error(f"Error en búsqueda por metadatos Archive.org: {e}")

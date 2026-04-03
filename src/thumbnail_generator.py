@@ -30,14 +30,24 @@ class ThumbnailGenerator:
             if isinstance(keywords, list):
                 keywords = ", ".join(keywords)
 
-            # Prompt optimizado para miniaturas virales de YouTube
+            # Prompt optimizado para miniaturas virales de YouTube (Mejorado)
+            description = script_data.get('description', '')
             prompt = (
-                f"Create a high-quality, professional YouTube thumbnail for a video titled: '{title}'. "
-                f"Visual elements to include: {keywords}. "
-                "Style: Cinematic, ultra-realistic, vibrant colors, high contrast, "
-                "dramatic lighting, 8k resolution, centered composition, "
-                "generating intense curiosity and mystery. "
-                "IMPORTANT: No text, no letters, no words in the image. Just a powerful visual scene."
+                "Crea una miniatura de YouTube extremadamente llamativa, diseñada para captar la atención en segundos y generar curiosidad inmediata. "
+                f"Basarse en la siguiente descripción del video: {description}. "
+                "🔥 Requisitos de diseño: "
+                "Estilo impactante, moderno y emocional. "
+                "Colores vibrantes, alto contraste (rojos, amarillos, neón, sombras intensas). "
+                "Expresión visual que genere: Sorpresa 😱, Misterio 🤔, Urgencia ⚠️. "
+                "👁️ Elementos clave: "
+                "Rostros expresivos o siluetas impactantes (si aplica). "
+                "Texto corto, grande y poderoso (máx. 3–5 palabras), por ejemplo: 'LA VERDAD OCULTA', 'NADIE TE LO DIJO', 'ESTO LO CAMBIA TODO'. "
+                "Fondo dinámico relacionado al tema. "
+                "Iluminación tipo cine (dramática, con sombras y brillos). "
+                "📐 Formato obligatorio: Tamaño: 1280 x 720 px (miniatura de YouTube), Relación: 16:9, Alta calidad (HD). "
+                "Texto legible incluso en pantallas pequeñas (móvil). "
+                "🚀 Objetivo: La miniatura debe hacer que cualquier persona diga: 'Tengo que ver este video ahora mismo'. "
+                "⚠️ Importante: No hacer diseños simples o genéricos. Evitar exceso de texto. Priorizar impacto visual y emoción."
             )
 
             headers = {
