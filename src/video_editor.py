@@ -92,7 +92,18 @@ class VideoEditor:
                     
                     # Recortar fondo para que sea exactamente 1080x1920
                     bg = bg.crop(x_center=bg.w/2, y_center=bg.h/2, width=target_w, height=target_h)
-                    bg = bg.fx(vfx.gaussian_blur, 15) # Fondo desenfocado
+                    
+                    # MEJORA: Desenfoque manual con PIL (evita errores de MoviePy)
+                    from PIL import ImageFilter as pil_filters
+                    def apply_blur(image):
+                        # Convertir frame de numpy a PIL
+                        pil_img = Image.fromarray(image.astype('uint8'))
+                        # Aplicar desenfoque
+                        pil_img = pil_img.filter(pil_filters.GaussianBlur(radius=15))
+                        # Convertir de vuelta a numpy
+                        return np.array(pil_img)
+                    
+                    bg = bg.fl_image(apply_blur)
                     bg = bg.fx(vfx.colorx, 0.7) # Oscurecer un poco el fondo
                     
                     # 2. Crear el frente (el clip original manteniendo su relación de aspecto)
