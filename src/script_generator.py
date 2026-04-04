@@ -57,7 +57,7 @@ class ScriptGenerator:
             "El título del video DEBE comenzar con al menos dos hashtags relevantes seguidos del texto principal.\n"
             "Ejemplo: '#reflexion #motivacion Título del video'\n"
             "Asegúrate de que los hashtags sean coherentes con el tema y la categoría.\n\n"
-            "ESTRUCTURA OBLIGATORIA DEL CONTENIDO:\n"  }],path:
+            "ESTRUCTURA OBLIGATORIA DEL CONTENIDO:\n"
             "1. INICIO IMPACTANTE (HOOK): Una frase poderosa en los primeros 5 segundos, que sea emocional, intrigante y directo. \n"  
             "2. DESARROLLO INTERESANTE: Frases cortas (tipo TikTok), incluyendo preguntas al espectador y generando curiosidad constante. Evita el lenguaje académico y habla como si conversaras con una persona.\n"  
             "3. GIRO O MOMENTO LLAMATIVO: Introduce algo inesperado.\n"  
