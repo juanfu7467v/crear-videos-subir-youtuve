@@ -117,7 +117,7 @@ class YouTubeUploader:
             
             body = {
                 "snippet": {
-                    "title": title[:100], 
+                    "title": title[:100].strip(), 
                     "description": description, 
                     "categoryId": category_id,
                     "tags": tags,
