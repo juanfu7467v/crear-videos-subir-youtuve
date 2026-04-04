@@ -81,6 +81,27 @@ class ThumbnailGenerator:
                         # Convertir a RGB si es necesario (DALL-E suele devolver PNG o WEBP que pueden ser RGBA)
                         if img.mode in ("RGBA", "P"):
                             img = img.convert("RGB")
+
+                        # --- AJUSTE DE TAMAÑO EXACTO 1280x720 (16:9) ---
+                        target_w, target_h = 1280, 720
+                        target_ratio = target_w / target_h
+                        img_w, img_h = img.size
+                        img_ratio = img_w / img_h
+
+                        if img_ratio > target_ratio:
+                            # La imagen es más ancha que el objetivo: ajustar por altura y recortar ancho
+                            new_h = target_h
+                            new_w = int(new_h * img_ratio)
+                            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                            left = (new_w - target_w) / 2
+                            img = img.crop((left, 0, left + target_w, target_h))
+                        else:
+                            # La imagen es más alta que el objetivo (o igual): ajustar por ancho y recortar altura
+                            new_w = target_w
+                            new_h = int(new_w / img_ratio)
+                            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                            top = (new_h - target_h) / 2
+                            img = img.crop((0, top, target_w, top + target_h))
                         
                         # Guardar con compresión progresiva
                         quality = 85
