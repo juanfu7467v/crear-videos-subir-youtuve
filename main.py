@@ -211,18 +211,33 @@ class VideoAutoPipeline:
             logger.warning(f"⚠️ Error durante la limpieza de residuos: {e}")
 
     def _keep_alive_task(self):
+        """Tarea que envía peticiones GET /keep-alive para mantener la máquina encendida."""
+        # En Fly.io, usamos la URL interna para mayor confiabilidad, o localhost como respaldo
         app_name = os.getenv("FLY_APP_NAME")
-        base_url = f"https://{app_name}.fly.dev" if app_name else "http://localhost:8080"
+        urls = []
+        if app_name:
+            urls.append(f"http://{app_name}.internal:8080/keep-alive")
+            urls.append(f"https://{app_name}.fly.dev/keep-alive")
+        urls.append("http://localhost:8080/keep-alive")
         
-        logger.info(f"📡 Keep-alive usará la URL: {base_url}/keep-alive")
+        logger.info(f"📡 Sistema Keep-alive iniciado (Intervalo: 30s)")
         
         while self.keep_alive_running:
-            try:
-                requests.get(f"{base_url}/keep-alive", timeout=10)
-                logger.debug("❤️ Keep-alive signal sent to public endpoint.")
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"⚠️ Error sending keep-alive signal: {e}")
+            success = False
+            for url in urls:
+                try:
+                    # Usamos un timeout corto para no bloquear el hilo
+                    requests.get(url, timeout=5)
+                    logger.debug(f"❤️ Keep-alive enviado a {url}")
+                    success = True
+                    break # Si una funciona, es suficiente
+                except Exception:
+                    continue
             
+            if not success:
+                logger.warning("⚠️ No se pudo enviar la señal keep-alive a ninguna URL.")
+            
+            # Esperar 30 segundos antes de la siguiente señal
             time.sleep(30)
 
     def _start_keep_alive(self):
