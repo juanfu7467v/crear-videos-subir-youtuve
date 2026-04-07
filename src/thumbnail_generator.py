@@ -31,23 +31,23 @@ class ThumbnailGenerator:
                 keywords = ", ".join(keywords)
 
             # Prompt optimizado para miniaturas virales de YouTube (Mejorado)
-            description = script_data.get('description', '')
+                        description = script_data.get('description', '')
             prompt = (
-                "Crea una miniatura de YouTube extremadamente llamativa, diseñada para captar la atención en segundos y generar curiosidad inmediata. "
-                f"Basarse en la siguiente descripción del video: {description}. "
-                "🔥 Requisitos de diseño: "
-                "Estilo impactante, moderno y emocional. "
-                "Colores vibrantes, alto contraste (rojos, amarillos, neón, sombras intensas). "
-                "Expresión visual que genere: Sorpresa 😱, Misterio 🤔, Urgencia ⚠️. "
-                "👁️ Elementos clave: "
-                "Rostros expresivos o siluetas impactantes (si aplica). "
-                "Texto corto, grande y poderoso (máx. 3–5 palabras), por ejemplo: 'LA VERDAD OCULTA', 'NADIE TE LO DIJO', 'ESTO LO CAMBIA TODO'. "
-                "Fondo dinámico relacionado al tema. "
-                "Iluminación tipo cine (dramática, con sombras y brillos). "
-                "📐 Formato obligatorio: Tamaño: 1280 x 720 px (miniatura de YouTube), Relación: 16:9, Alta calidad (HD). "
-                "Texto legible incluso en pantallas pequeñas (móvil). "
-                "🚀 Objetivo: La miniatura debe hacer que cualquier persona diga: 'Tengo que ver este video ahora mismo'. "
-                "⚠️ Importante: No hacer diseños simples o genéricos. Evitar exceso de texto. Priorizar impacto visual y emoción."
+                "Actúa como un psicólogo de masas y experto en CTR de YouTube con más de 50 canales millonarios. "
+                "Crea una miniatura de alto impacto diseñada para la 'parada de pulgar' instantánea. "
+                f"Basado en esta descripción: {description}. "
+                "🔥 ESTRATEGIA DE MANIPULACIÓN VISUAL: "
+                "1. COMPOSICIÓN: Aplica la regla de tercios con un sujeto dominante a un lado. El fondo debe contar una historia de misterio o caos. "
+                "2. PSICOLOGÍA DEL COLOR: Usa contrastes agresivos de 'Poder y Peligro' (Amarillo/Negro, Rojo/Cian, Neón/Oscuridad profunda). Saturación al máximo. "
+                "3. EMOCIÓN PRIMAL: Si hay rostros, deben mostrar un shock extremo, miedo o una sonrisa maliciosa. Si son objetos, deben verse prohibidos o legendarios. "
+                "4. GATILLO DE CURIOSIDAD: Crea un 'espacio vacío' mental. Algo debe estar roto, brillando o siendo señalado para que el espectador necesite la respuesta. "
+                "👁️ REQUISITOS TÉCNICOS DE ÉLITE: "
+                "Texto: Máximo 3 palabras. Fuente 'Ultra-Bold'. Legibilidad perfecta en móviles (20% del tamaño de pantalla). "
+                "Ejemplos de texto: 'ESTÁN MINTIENDO', 'EL FIN.', 'NADIE VIO ESTO'. "
+                "Iluminación: Estilo cinematográfico oscuro (Rim lighting) con sombras dramáticas que den profundidad 3D. "
+                "📐 FORMATO: 1280 x 720 px, Relación 16:9, Calidad 4K fotorrealista. "
+                "🚀 OBJETIVO FINAL: El usuario debe sentir que si no hace clic, se está perdiendo el secreto más grande de su vida. "
+                "⚠️ PROHIBICIÓN: Cero diseños planos. Prohibido el estilo corporativo. Evitar elementos genéricos. Prioriza la tensión visual."
             )
 
             headers = {
