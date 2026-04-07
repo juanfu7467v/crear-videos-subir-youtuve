@@ -76,47 +76,32 @@ class VideoEditor:
                     clip = clip.fx(vfx.resize, lambda t: 1 + 0.02*t)
                 
                 # MEJORAS VISUALES: Nitidez, Brillo y Contraste
-                # eq=contrast=1.1:brightness=0.05
-                # unsharp=5:5:1.0:5:5:0.0
-                # MoviePy no tiene unsharp nativo fácil, usamos colorx y lum_contrast
                 clip = clip.fx(vfx.lum_contrast, lum=12, contrast=0.1) # Simula brillo 0.05 y contraste 1.1
                 
                 # Redimensionar según formato
                 if is_short:
                     # TÉCNICA: Fondo desenfocado para Shorts
-                    # 1. Crear el fondo (el mismo clip, redimensionado para cubrir 9:16 y desenfocado)
                     bg = clip.resize(height=target_h)
-                    # Si el ancho sigue siendo menor que el target, ajustar por ancho
                     if bg.w < target_w:
                         bg = bg.resize(width=target_w)
                     
-                    # Recortar fondo para que sea exactamente 1080x1920
                     bg = bg.crop(x_center=bg.w/2, y_center=bg.h/2, width=target_w, height=target_h)
                     
-                    # MEJORA: Desenfoque manual con PIL (evita errores de MoviePy)
                     from PIL import ImageFilter as pil_filters
                     def apply_blur(image):
-                        # Convertir frame de numpy a PIL
                         pil_img = Image.fromarray(image.astype('uint8'))
-                        # Aplicar desenfoque
                         pil_img = pil_img.filter(pil_filters.GaussianBlur(radius=15))
-                        # Convertir de vuelta a numpy
                         return np.array(pil_img)
                     
                     bg = bg.fl_image(apply_blur)
                     bg = bg.fx(vfx.colorx, 0.7) # Oscurecer un poco el fondo
                     
-                    # 2. Crear el frente (el clip original manteniendo su relación de aspecto)
-                    # Redimensionar para que quepa en el ancho
                     fg = clip.resize(width=target_w)
-                    # Si al redimensionar por ancho, la altura supera el target, redimensionar por altura
                     if fg.h > target_h:
                         fg = fg.resize(height=target_h)
                     
-                    # 3. Componer el clip individual (fondo + frente centrado)
                     clip = CompositeVideoClip([bg, fg.set_position("center")], size=(target_w, target_h))
                 else:
-                    # Para videos largos, mantenemos el resize/crop estándar pero con las mejoras visuales ya aplicadas
                     clip = clip.resize(height=target_h)
                     if clip.w > target_w:
                         clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=target_w, height=target_h)
@@ -174,18 +159,20 @@ class VideoEditor:
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
-        # 4. Añadir Subtítulos
+        # 4. Añadir Subtítulos (Estilo mejorado basado en video de referencia)
         full_script = str(script_data.get('full_script', ''))
         subtitles = []
         import re
+        # Dividir por frases más cortas para que el efecto "pop" sea más dinámico
         raw_sentences = re.split(r'[.,!?\n]', full_script)
         sentences = [s.strip() for s in raw_sentences if s.strip()]
         
         final_sentences = []
         for s in sentences:
-            while len(s) > 60:
-                split_idx = s[:60].rfind(' ')
-                if split_idx == -1: split_idx = 60
+            # Acortar frases para que quepan bien con el recuadro de fondo
+            while len(s) > 40:
+                split_idx = s[:40].rfind(' ')
+                if split_idx == -1: split_idx = 40
                 final_sentences.append(s[:split_idx].strip())
                 s = s[split_idx:].strip()
             if s: final_sentences.append(s)
@@ -194,19 +181,38 @@ class VideoEditor:
             time_per_sentence = float(duration) / len(final_sentences)
             for i, sentence in enumerate(final_sentences):
                 try:
-                    fs = 150 if is_short else 100
+                    # Estilo basado en el video de referencia:
+                    # - Fuente Sans-Serif Bold (Liberation-Sans-Bold)
+                    # - Color blanco
+                    # - Recuadro de fondo negro sólido (bg_color='black')
+                    # - Posición centrada en el tercio inferior
+                    # - Efecto "pop" (zoom in)
+                    
+                    fs = 100 if is_short else 70
+                    start_t = float(i * time_per_sentence)
+                    end_t = start_t + float(time_per_sentence)
+                    
                     txt_clip = TextClip(
                         sentence, 
                         fontsize=fs, 
                         color='white',
                         font='Liberation-Sans-Bold',
-                        stroke_color='black',
-                        stroke_width=5,
                         method='caption',
-                        size=(target_w * 0.9, None),
+                        size=(target_w * 0.8, None),
                         align='center',
                         bg_color='black'
-                    ).set_start(float(i * time_per_sentence)).set_duration(float(time_per_sentence)).set_position(('center', target_h * 0.75))
+                    ).set_start(start_t).set_duration(float(time_per_sentence)).set_position(('center', target_h * 0.75))
+                    
+                    # Animación "Pop" (ligero zoom al aparecer)
+                    # El clip empieza un poco más pequeño y crece rápidamente al tamaño normal
+                    def zoom_effect(t):
+                        # t es el tiempo relativo al inicio del clip
+                        if t < 0.1:
+                            return 0.8 + 2 * t # De 0.8 a 1.0 en 0.1 segundos
+                        return 1.0
+                    
+                    txt_clip = txt_clip.fx(vfx.resize, zoom_effect)
+                    
                     subtitles.append(txt_clip)
                 except Exception as e:
                     logger.warning(f"No se pudo crear subtítulo: {e}")
@@ -217,12 +223,10 @@ class VideoEditor:
         
         logger.info(f"Renderizando video final en {output_path}...")
         
-        # MEJORA: Mayor bitrate para evitar pérdida de calidad
-        # -b:v 5M solicitado
         ffmpeg_params = [
-            "-crf", "18", # Menor CRF = mayor calidad (rango 18-28, 18 es visualmente sin pérdida)
+            "-crf", "18", 
             "-tune", "film",
-            "-b:v", "5M", # Bitrate de video 5Mbps
+            "-b:v", "5M", 
             "-maxrate", "8M",
             "-bufsize", "10M"
         ]
@@ -233,7 +237,7 @@ class VideoEditor:
             codec="libx264", 
             audio_codec="aac", 
             logger=None, 
-            preset="medium", # Cambio de ultrafast a medium para mejor compresión/calidad
+            preset="medium", 
             threads=4,
             ffmpeg_params=ffmpeg_params
         )
