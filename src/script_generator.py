@@ -41,7 +41,7 @@ class ScriptGenerator:
             f"La descripción debe ser corta (MÁXIMO 450 CARACTERES) y seguir EXACTAMENTE este formato:\n\n"  
             "Análisis: [Nombre de la Película] 🎲\n"  
             "¿Dominas el juego o eres una pieza más? [Película] no es cine, es un manual de poder para los que no temen al caos. Mientras la masa obedece, el líder ejecuta. Solo la élite entiende estas reglas.\n\n"  
-            "🔥 Mírala gratis aquí: 👉 {{PELIPREX_LINK}}\n\n"  
+            "🔥 Mírala gratis aquí: 👉 {{https://masitaprex.com/PeliPREX?movie=}}\n\n"  
             "💎 Cine exclusivo. Sin anuncios.\n"  
             "👉 https://masitaprex.com/PeliPREX\n\n"  
             "Únete al círculo. El resto solo mira. 🚀\n\n"  
