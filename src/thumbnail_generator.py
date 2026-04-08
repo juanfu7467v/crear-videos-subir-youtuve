@@ -31,7 +31,7 @@ class ThumbnailGenerator:
                 keywords = ", ".join(keywords)
 
             # Prompt optimizado para miniaturas virales de YouTube (Mejorado)
-                        description = script_data.get('description', '')
+            description = script_data.get('description', '')
             prompt = (
                 "Actúa como un psicólogo de masas y experto en CTR de YouTube con más de 50 canales millonarios. "
                 "Crea una miniatura de alto impacto diseñada para la 'parada de pulgar' instantánea. "
