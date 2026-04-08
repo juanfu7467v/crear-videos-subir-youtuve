@@ -83,6 +83,11 @@ class MediaFetcher:
             logger.info(f"Prioridad 1: Usando limpieza de texto: {movie_title}")
         
         # 2. Intentar obtener clips de Peliprex (Prioridad 1)
+        # Ajuste de duración para Shorts (Mejora 1): Asegurar exactamente 60s
+        if is_short:
+            target_duration = 60
+            logger.info(f"Ajustando target_duration a exactamente {target_duration}s para Short.")
+
         # Calculamos cuántos ciclos de 7-10-7 caben, pero pediremos suficientes clips para cubrir la duración
         # Si cada ciclo es ~17s, necesitamos target_duration / 17 ciclos.
         # Cada ciclo usa 1 clip de Peliprex y 1 de Stock.
@@ -297,16 +302,20 @@ class MediaFetcher:
             logger.debug(f"Pollinations error para '{keyword}': {e}")
             return None
 
-    def _download_file(self, url: str, save_path: str) -> bool:
+    def _download_file(self, url: str, dest: str) -> bool:
+        """Descarga un archivo. Nota: La limpieza se realiza en el editor tras procesar el clip."""
         try:
-            resp = self.session.get(url, stream=True, timeout=30)
-            resp.raise_for_status()
-            with open(save_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            return os.path.exists(save_path) and os.path.getsize(save_path) > 0
+            with self.session.get(url, stream=True, timeout=30) as r:
+                r.raise_for_status()
+                with open(dest, "wb") as f:
+                    for chunk in r.iter_content(8192):
+                        f.write(chunk)
+            return True
         except Exception as e:
             logger.debug(f"Download error: {e}")
+            if Path(dest).exists():
+                try: Path(dest).unlink()
+                except: pass
             return False
 
     def generate_thumbnail(self, movie_title: str, video_title: str, save_path: str, categoria: str = "general") -> bool:

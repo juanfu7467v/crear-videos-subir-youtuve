@@ -67,7 +67,7 @@ class ScriptGenerator:
             "- IDIOMA: Español natural, directo y autoritario.\n"  
             "- KEYWORDS VISUALES (Pexels): Solo términos visuales CRUDOS y POTENTES en inglés (ej: 'angry man shouting', 'dark empty street', 'golden luxury', 'hidden camera', 'burning fire').\n"  
             "- BÚSQUEDA DE STOCK (Archive.org): Solo el nombre real de la película/personaje: '{topic}'.\n"  
-            "- DURACIÓN: " + ("Máximo 55 segundos" if "short" in format_suggested else "Entre 3 y 5 minutos") + ".\n\n"  
+            "- DURACIÓN: " + ("Exactamente 60 segundos (ni un segundo más ni menos)" if "short" in format_suggested.lower() else "Entre 3 y 5 minutos") + ".\n\n"  
             "INSTRUCCIÓN ESPECIAL PELIPREX:\n"  
             "Extrae solo el sustantivo principal (Película/Serie) para la búsqueda de clips reales.\n\n"  
             "Responde ÚNICAMENTE con un objeto JSON que contenga:\n"  

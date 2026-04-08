@@ -93,7 +93,10 @@ class VideoEditor:
                         pil_img = pil_img.filter(pil_filters.GaussianBlur(radius=15))
                         return np.array(pil_img)
                     
+                    # OPTIMIZACIÓN (Mejora 3): Reducir resolución del fondo antes de desenfocar
+                    bg = bg.resize(height=target_h // 2) 
                     bg = bg.fl_image(apply_blur)
+                    bg = bg.resize(height=target_h) # Volver a tamaño original
                     bg = bg.fx(vfx.colorx, 0.7) # Oscurecer un poco el fondo
                     
                     fg = clip.resize(width=target_w)
@@ -102,12 +105,15 @@ class VideoEditor:
                     
                     clip = CompositeVideoClip([bg, fg.set_position("center")], size=(target_w, target_h))
                 else:
+                    # OPTIMIZACIÓN (Mejora 3): Para videos largos, usar redimensionamiento simple sin margen si es posible
                     clip = clip.resize(height=target_h)
                     if clip.w > target_w:
                         clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=target_w, height=target_h)
                     elif clip.w < target_w:
-                        diff = target_w - clip.w
-                        clip = clip.margin(left=int(diff//2), right=int(diff-diff//2), color=(0,0,0))
+                        # Si es más estrecho, reescalar al ancho para evitar el costoso .margin() en CPU
+                        clip = clip.resize(width=target_w)
+                        if clip.h > target_h:
+                            clip = clip.crop(y_center=clip.h/2, height=target_h)
                 
                 clip = clip.set_start(current_time)
                 clips.append(clip)
@@ -231,14 +237,15 @@ class VideoEditor:
             "-bufsize", "10M"
         ]
         
+        # OPTIMIZACIÓN (Mejora 3): Usar preset 'ultrafast' para ahorrar CPU y memoria
         final_video.write_videofile(
             str(output_path), 
             fps=24, 
             codec="libx264", 
             audio_codec="aac", 
             logger=None, 
-            preset="medium", 
-            threads=4,
+            preset="ultrafast", 
+            threads=2, # Reducir hilos para evitar picos de memoria en máquinas compartidas
             ffmpeg_params=ffmpeg_params
         )
         
@@ -251,5 +258,16 @@ class VideoEditor:
         if 'bg_music' in locals(): 
             try: bg_music.close()
             except: pass
+
+        # LIMPIEZA INMEDIATA (Mejora 2): Borrar clips descargados tras el render
+        logger.info("🧹 Limpiando clips temporales procesados...")
+        for item in media_list:
+            p = item.get("path")
+            if p and Path(p).exists():
+                try:
+                    Path(p).unlink()
+                    logger.debug(f"Eliminado: {p}")
+                except Exception as e:
+                    logger.warning(f"No se pudo eliminar {p}: {e}")
         
         return output_path
