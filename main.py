@@ -114,11 +114,14 @@ class VideoAutoPipeline:
             duration = self.tts_engine.get_audio_duration(audio_path)
             
             # Decidir si es short para la descarga de media
-            is_short = "short" in format_suggested.lower() or duration <= 60.0
+            is_short = "short" in format_suggested.lower()
             
+            # Si es short, forzar 60s reales (Mejora 1)
+            target_fetch_duration = 60 if is_short else max(int(duration), 120)
+
             media_list = self.media_fetcher.fetch_media_for_video(
                 segmented_script=script_data.get("segmented_script", []),
-                target_duration=max(int(duration), 120),
+                target_duration=target_fetch_duration,
                 save_dir="assets/temp",
                 video_id=video_id,
                 prefer_video=True,
@@ -206,6 +209,14 @@ class VideoAutoPipeline:
             if temp_assets_dir.exists():
                 shutil.rmtree(temp_assets_dir)
                 logger.info(f"🗑️ Eliminado directorio de media temporal: {temp_assets_dir}")
+            
+            # Limpieza de caché de MoviePy (Mejora 2)
+            import tempfile
+            temp_dir = Path(tempfile.gettempdir())
+            for moviepy_file in temp_dir.glob("tmpxxx*"):
+                try: moviepy_file.unlink()
+                except: pass
+            logger.info("🧹 Caché de MoviePy limpiada.")
                 
         except Exception as e:
             logger.warning(f"⚠️ Error durante la limpieza de residuos: {e}")
@@ -220,7 +231,7 @@ class VideoAutoPipeline:
             urls.append(f"https://{app_name}.fly.dev/keep-alive")
         urls.append("http://localhost:8080/keep-alive")
         
-        logger.info(f"📡 Sistema Keep-alive iniciado (Intervalo: 30s)")
+        logger.info(f"📡 Sistema Keep-alive iniciado (Intervalo: 15s para mayor seguridad)")
         
         while self.keep_alive_running:
             success = False
@@ -237,8 +248,8 @@ class VideoAutoPipeline:
             if not success:
                 logger.warning("⚠️ No se pudo enviar la señal keep-alive a ninguna URL.")
             
-            # Esperar 30 segundos antes de la siguiente señal
-            time.sleep(30)
+            # Esperar 15 segundos antes de la siguiente señal para evitar el auto-stop de Fly.io
+            time.sleep(15)
 
     def _start_keep_alive(self):
         self.keep_alive_running = True

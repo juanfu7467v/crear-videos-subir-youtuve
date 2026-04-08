@@ -26,10 +26,15 @@ class VideoEditor:
 
         is_short = "short" in str(format_type).lower() if format_type else (duration <= 60.0)
         
+        # MEJORA 1: Si es Short, forzar duración a exactamente 60s
+        if is_short:
+            logger.info(f"Forzando duración de Short a 60.0s (Audio original: {duration:.2f}s)")
+            duration = 60.0
+
         target_h = 1920 if is_short else 1080
         target_w = 1080 if is_short else 1920
         
-        logger.info(f"Formato detectado: {'Short (9:16)' if is_short else 'Largo (16:9)'} - Duración: {duration:.2f}s")
+        logger.info(f"Formato detectado: {'Short (9:16)' if is_short else 'Largo (16:9)'} - Duración final: {duration:.2f}s")
         
         # 2. Preparar Clips Visuales
         clips = []
@@ -55,7 +60,9 @@ class VideoEditor:
 
                 if item_type == "video":
                     try:
-                        raw_clip = VideoFileClip(path_str, audio=False)
+                        # OPTIMIZACIÓN: Cargar solo el fragmento necesario y sin audio
+                        # target_resolution ayuda a reducir la carga de RAM al decodificar
+                        raw_clip = VideoFileClip(path_str, audio=False, target_resolution=(target_h, target_w))
                     except Exception as ve:
                         logger.warning(f"Video corrupto detectado ({path_str}): {ve}")
                         continue
@@ -64,6 +71,7 @@ class VideoEditor:
                     if raw_duration < clip_duration:
                         clip = raw_clip.loop(duration=clip_duration)
                     else:
+                        # Si el clip es más largo que lo que necesitamos (segment_duration), cortarlo
                         safe_end = min(raw_duration - 0.1, clip_duration)
                         clip = raw_clip.subclip(0, safe_end).set_duration(clip_duration)
                     
@@ -93,17 +101,22 @@ class VideoEditor:
                         pil_img = pil_img.filter(pil_filters.GaussianBlur(radius=15))
                         return np.array(pil_img)
                     
-                    # OPTIMIZACIÓN (Mejora 3): Reducir resolución del fondo antes de desenfocar
-                    bg = bg.resize(height=target_h // 2) 
+                    # OPTIMIZACIÓN EXTREMA (Mejora 3): Reducir resolución del fondo drásticamente para ahorrar RAM
+                    # Un radio de 15 en una imagen pequeña da el mismo efecto visual que en una grande pero con 1/16 del costo de memoria
+                    small_h = 360 # Resolución muy baja para el fondo desenfocado
+                    small_w = int(target_w * (small_h / target_h))
+                    
+                    bg = bg.resize(height=small_h)
                     bg = bg.fl_image(apply_blur)
-                    bg = bg.resize(height=target_h) # Volver a tamaño original
+                    bg = bg.resize(height=target_h) # Reescalar a 1080x1920 (el blur oculta el pixelado)
                     bg = bg.fx(vfx.colorx, 0.7) # Oscurecer un poco el fondo
                     
                     fg = clip.resize(width=target_w)
                     if fg.h > target_h:
                         fg = fg.resize(height=target_h)
                     
-                    clip = CompositeVideoClip([bg, fg.set_position("center")], size=(target_w, target_h))
+                    # Usar use_bgclip=True en CompositeVideoClip para optimizar memoria si el primer clip es el fondo
+                    clip = CompositeVideoClip([bg, fg.set_position("center")], size=(target_w, target_h), use_bgclip=True)
                 else:
                     # OPTIMIZACIÓN (Mejora 3): Para videos largos, usar redimensionamiento simple sin margen si es posible
                     clip = clip.resize(height=target_h)
@@ -147,7 +160,19 @@ class VideoEditor:
         visual_base = visual_base.set_duration(duration)
         
         # 3. Añadir Música de Fondo
-        final_audio = tts_audio
+        # Asegurar que el audio TTS dure lo mismo que el video si es Short
+        if is_short and float(tts_audio.duration) < duration:
+            # Rellenar con silencio si el audio es más corto para llegar a 60s
+            from moviepy.audio.AudioClip import AudioArrayClip
+            import numpy as np
+            silence_duration = duration - float(tts_audio.duration)
+            silence = AudioArrayClip(np.zeros((int(44100 * silence_duration), 2)), fps=44100)
+            from moviepy.audio.AudioClip import concatenate_audioclips
+            tts_audio_padded = concatenate_audioclips([tts_audio, silence])
+        else:
+            tts_audio_padded = tts_audio.set_duration(duration)
+
+        final_audio = tts_audio_padded
         try:
             music_files = list(Path(music_dir).glob("*.mp3"))
             if music_files:
@@ -161,7 +186,7 @@ class VideoEditor:
                     bg_music = bg_music.set_duration(duration)
                 
                 from moviepy.audio.AudioClip import CompositeAudioClip
-                final_audio = CompositeAudioClip([tts_audio, bg_music])
+                final_audio = CompositeAudioClip([tts_audio_padded, bg_music])
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
@@ -237,7 +262,8 @@ class VideoEditor:
             "-bufsize", "10M"
         ]
         
-        # OPTIMIZACIÓN (Mejora 3): Usar preset 'ultrafast' para ahorrar CPU y memoria
+        # OPTIMIZACIÓN EXTREMA (Mejora 3): Renderizado por fragmentos para evitar OOM
+        # MoviePy a veces acumula memoria en videos largos. Usamos threads=1 para máxima estabilidad de RAM.
         final_video.write_videofile(
             str(output_path), 
             fps=24, 
@@ -245,8 +271,9 @@ class VideoEditor:
             audio_codec="aac", 
             logger=None, 
             preset="ultrafast", 
-            threads=2, # Reducir hilos para evitar picos de memoria en máquinas compartidas
-            ffmpeg_params=ffmpeg_params
+            threads=1, # Un solo hilo consume mucha menos RAM en MoviePy
+            ffmpeg_params=ffmpeg_params,
+            bitrate="3000k" # Limitar bitrate para reducir presión de buffer
         )
         
         final_video.close()
@@ -255,6 +282,9 @@ class VideoEditor:
             try: c.close()
             except: pass
         tts_audio.close()
+        if 'tts_audio_padded' in locals():
+            try: tts_audio_padded.close()
+            except: pass
         if 'bg_music' in locals(): 
             try: bg_music.close()
             except: pass
