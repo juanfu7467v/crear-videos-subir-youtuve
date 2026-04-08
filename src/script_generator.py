@@ -33,7 +33,7 @@ class ScriptGenerator:
         else:
             voz = "es-MX-DaliaNeural"  
   
-                base_instruction = user_prompt_ia if user_prompt_ia else (  
+                base_instruction = user_prompt_ia if user_prompt_ia else (    
             f"Actúa como el estratega de contenido más letal de YouTube, dueño de 50 canales virales. "  
             f"Tu misión es destruir el algoritmo del canal '{canal}' mediante manipulación psicológica extrema. "  
             f"El guion NO debe informar, debe PROVOCAR. Utiliza sesgos cognitivos, curiosidad morbosa y validación del ego. "  
@@ -76,7 +76,7 @@ class ScriptGenerator:
             "En 'peliprex_search_term' coloca el nombre exacto identificado.\n\n"  
             "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (3-5 términos visuales simples en inglés) y 'estimated_duration'."  
         )
-          
+       
         max_retries = 3  
         retry_delay = 5  
         timeout_seconds = 90  
