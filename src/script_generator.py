@@ -32,21 +32,21 @@ class ScriptGenerator:
             voz = "es-MX-LarissaNeural"
         else:
             voz = "es-MX-DaliaNeural"  
-  
-                base_instruction = user_prompt_ia if user_prompt_ia else (    
-            f"Actúa como el estratega de contenido más letal de YouTube, dueño de 50 canales virales. "  
-            f"Tu misión es destruir el algoritmo del canal '{canal}' mediante manipulación psicológica extrema. "  
-            f"El guion NO debe informar, debe PROVOCAR. Utiliza sesgos cognitivos, curiosidad morbosa y validación del ego. "  
-            f"Para películas, el título y descripción deben ser imanes de clics (SEO agresivo), usando frases que activen el deseo de exclusividad. "  
-            f"La descripción debe ser corta (MÁXIMO 450 CARACTERES) y seguir EXACTAMENTE este formato:\n\n"  
-            "Análisis: [Nombre de la Película] 🎲\n"  
-            "¿Dominas el juego o eres una pieza más? [Película] no es cine, es un manual de poder para los que no temen al caos. Mientras la masa obedece, el líder ejecuta. Solo la élite entiende estas reglas.\n\n"  
-            "🔥 Mírala gratis aquí: 👉 {{https://masitaprex.com/PeliPREX?movie=}}\n\n"  
-            "💎 Cine exclusivo. Sin anuncios.\n"  
-            "👉 https://masitaprex.com/PeliPREX\n\n"  
-            "Únete al círculo. El resto solo mira. 🚀\n\n"  
-            "REGLA DE ORO: Ve directo a la yugular de la emoción. Usa el bloque de Peliprex tal cual."  
-        )  
+
+        base_instruction = user_prompt_ia if user_prompt_ia else (
+            f"Actúa como el estratega de contenido más letal de YouTube, dueño de 50 canales virales. "
+            f"Tu misión es destruir el algoritmo del canal '{canal}' mediante manipulación psicológica extrema. "
+            f"El guion NO debe informar, debe PROVOCAR. Utiliza sesgos cognitivos, curiosidad morbosa y validación del ego. "
+            f"Para películas, el título y descripción deben ser imanes de clics (SEO agresivo), usando frases que activen el deseo de exclusividad. "
+            f"La descripción debe ser corta (MÁXIMO 450 CARACTERES) y seguir EXACTAMENTE este formato:\n\n"
+            "Análisis: [Nombre de la Película] 🎲\n"
+            "¿Dominas el juego o eres una pieza más? [Película] no es cine, es un manual de poder para los que no temen al caos. Mientras la masa obedece, el líder ejecuta. Solo la élite entiende estas reglas.\n\n"
+            "🔥 Mírala gratis aquí: 👉 {{https://masitaprex.com/PeliPREX?movie=}}\n\n"
+            "💎 Cine exclusivo. Sin anuncios.\n"
+            "👉 https://masitaprex.com/PeliPREX\n\n"
+            "Únete al círculo. El resto solo mira. 🚀\n\n"
+            "REGLA DE ORO: Ve directo a la yugular de la emoción. Usa el bloque de Peliprex tal cual."
+        )
   
         prompt = (  
             f"{base_instruction}\n\n"  
