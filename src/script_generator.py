@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # Usando gemini-1.5-flash que es la versión estable recomendada para v1
-        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+        # Actualizado a gemini-2.5-flash según la solicitud del usuario.
+        # Se utiliza el endpoint v1 que es el estándar para modelos estables.
+        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={self.api_key}"
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -88,7 +89,8 @@ class ScriptGenerator:
             try:  
                 headers = {"Content-Type": "application/json"}
                 
-                # ELIMINADO: 'response_mime_type' de generationConfig ya que causa error 400 en v1
+                # Restaurado: 'response_mime_type' en generationConfig para asegurar salida JSON.
+                # Gemini 2.5 Flash soporta este campo nativamente en el endpoint v1.
                 payload = {
                     "contents": [
                         {
@@ -96,7 +98,10 @@ class ScriptGenerator:
                                 {"text": prompt}
                             ]
                         }
-                    ]
+                    ],
+                    "generationConfig": {
+                        "response_mime_type": "application/json"
+                    }
                 }
   
                 response = requests.post(self.api_url, headers=headers, json=payload, timeout=timeout_seconds)  
@@ -119,7 +124,7 @@ class ScriptGenerator:
                 if 'candidates' in data and len(data['candidates']) > 0:
                     text_response = data['candidates'][0]['content']['parts'][0]['text']
                     raw = text_response.strip()
-                    # Limpiar posibles etiquetas markdown
+                    # Limpiar posibles etiquetas markdown si la IA las incluye a pesar de generationConfig
                     raw = re.sub(r'```json\s*|\s*```', '', raw)
                     return json.loads(raw)
                 else:
