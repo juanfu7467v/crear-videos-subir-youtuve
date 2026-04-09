@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # Cambiado de v1beta a v1 (Versión estable para producción)
-        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={self.api_key}"
+        # Cambiado a gemini-1.5-flash que es la versión estable recomendada para v1
+        # gemini-2.0-flash a menudo requiere v1beta o tiene restricciones en v1 según la región
+        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={self.api_key}"
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -80,9 +81,9 @@ class ScriptGenerator:
             "Cada objeto en 'segmented_script' debe tener: 'segment_text', 'keywords' (3-5 términos visuales simples en inglés) y 'estimated_duration'."  
         )
        
-        max_retries = 5  # Aumentado de 3 a 5 para mayor resiliencia
-        retry_delay = 10 # Aumentado de 5 a 10 para dar tiempo a la API a recuperarse
-        timeout_seconds = 120 # Aumentado de 90 a 120
+        max_retries = 5  
+        retry_delay = 10 
+        timeout_seconds = 120 
   
         for attempt in range(max_retries):  
             try:  
@@ -103,12 +104,16 @@ class ScriptGenerator:
   
                 response = requests.post(self.api_url, headers=headers, json=payload, timeout=timeout_seconds)  
                 
-                # Manejo específico de errores de servidor (503, 500, 429)
+                # Manejo específico de errores de servidor o cuotas (500, 502, 503, 504, 429)
                 if response.status_code in [500, 502, 503, 504, 429]:
                     logger.warning(f"Error temporal de API Gemini ({response.status_code}) en intento {attempt + 1}. Reintentando en {retry_delay}s...")
                     time.sleep(retry_delay)
-                    retry_delay *= 1.5 # Backoff exponencial simple
+                    retry_delay *= 1.5 
                     continue
+
+                # Si es un error 400, registrar el cuerpo de la respuesta para diagnóstico
+                if response.status_code == 400:
+                    logger.error(f"Error 400 (Bad Request) en Gemini. Respuesta: {response.text}")
 
                 response.raise_for_status()  
                   
