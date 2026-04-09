@@ -1,8 +1,9 @@
 import logging
 import os
 import random
+import re
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageFilter as pil_filters
 import numpy as np
 
 # PARCHE: Esto obliga a que MoviePy encuentre la propiedad que busca
@@ -12,8 +13,15 @@ from moviepy.editor import (
     VideoFileClip, ImageClip, AudioFileClip, concatenate_videoclips, 
     CompositeVideoClip, TextClip, afx, vfx
 )
+from moviepy.audio.AudioClip import AudioArrayClip, concatenate_audioclips, CompositeAudioClip
 
 logger = logging.getLogger(__name__)
+
+def apply_blur(image):
+    """Función auxiliar global para evitar errores de variable libre 'np' en cierres."""
+    pil_img = Image.fromarray(image.astype('uint8'))
+    pil_img = pil_img.filter(pil_filters.GaussianBlur(radius=15))
+    return np.array(pil_img)
 
 class VideoEditor:
     def __init__(self):
@@ -95,12 +103,6 @@ class VideoEditor:
                     
                     bg = bg.crop(x_center=bg.w/2, y_center=bg.h/2, width=target_w, height=target_h)
                     
-                    from PIL import ImageFilter as pil_filters
-                    def apply_blur(image):
-                        pil_img = Image.fromarray(image.astype('uint8'))
-                        pil_img = pil_img.filter(pil_filters.GaussianBlur(radius=15))
-                        return np.array(pil_img)
-                    
                     # OPTIMIZACIÓN EXTREMA (Mejora 3): Reducir resolución del fondo drásticamente para ahorrar RAM
                     # Un radio de 15 en una imagen pequeña da el mismo efecto visual que en una grande pero con 1/16 del costo de memoria
                     small_h = 360 # Resolución muy baja para el fondo desenfocado
@@ -163,11 +165,8 @@ class VideoEditor:
         # Asegurar que el audio TTS dure lo mismo que el video si es Short
         if is_short and float(tts_audio.duration) < duration:
             # Rellenar con silencio si el audio es más corto para llegar a 60s
-            from moviepy.audio.AudioClip import AudioArrayClip
-            import numpy as np
             silence_duration = duration - float(tts_audio.duration)
             silence = AudioArrayClip(np.zeros((int(44100 * silence_duration), 2)), fps=44100)
-            from moviepy.audio.AudioClip import concatenate_audioclips
             tts_audio_padded = concatenate_audioclips([tts_audio, silence])
         else:
             tts_audio_padded = tts_audio.set_duration(duration)
@@ -185,7 +184,6 @@ class VideoEditor:
                 else:
                     bg_music = bg_music.set_duration(duration)
                 
-                from moviepy.audio.AudioClip import CompositeAudioClip
                 final_audio = CompositeAudioClip([tts_audio_padded, bg_music])
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
@@ -193,7 +191,6 @@ class VideoEditor:
         # 4. Añadir Subtítulos (Estilo mejorado basado en video de referencia)
         full_script = str(script_data.get('full_script', ''))
         subtitles = []
-        import re
         # Dividir por frases más cortas para que el efecto "pop" sea más dinámico
         raw_sentences = re.split(r'[.,!?\n]', full_script)
         sentences = [s.strip() for s in raw_sentences if s.strip()]
@@ -212,16 +209,8 @@ class VideoEditor:
             time_per_sentence = float(duration) / len(final_sentences)
             for i, sentence in enumerate(final_sentences):
                 try:
-                    # Estilo basado en el video de referencia:
-                    # - Fuente Sans-Serif Bold (Liberation-Sans-Bold)
-                    # - Color blanco
-                    # - Recuadro de fondo negro sólido (bg_color='black')
-                    # - Posición centrada en el tercio inferior
-                    # - Efecto "pop" (zoom in)
-                    
                     fs = 100 if is_short else 70
                     start_t = float(i * time_per_sentence)
-                    end_t = start_t + float(time_per_sentence)
                     
                     txt_clip = TextClip(
                         sentence, 
@@ -235,69 +224,36 @@ class VideoEditor:
                     ).set_start(start_t).set_duration(float(time_per_sentence)).set_position(('center', target_h * 0.75))
                     
                     # Animación "Pop" (ligero zoom al aparecer)
-                    # El clip empieza un poco más pequeño y crece rápidamente al tamaño normal
                     def zoom_effect(t):
-                        # t es el tiempo relativo al inicio del clip
                         if t < 0.1:
                             return 0.8 + 2 * t # De 0.8 a 1.0 en 0.1 segundos
                         return 1.0
                     
                     txt_clip = txt_clip.fx(vfx.resize, zoom_effect)
-                    
                     subtitles.append(txt_clip)
                 except Exception as e:
-                    logger.warning(f"No se pudo crear subtítulo: {e}")
+                    logger.warning(f"Error creando subtítulo {i}: {e}")
 
-        # 5. Componer Video Final
-        final_video = CompositeVideoClip([visual_base] + subtitles, size=(target_w, target_h)).set_audio(final_audio)
-        final_video = final_video.set_duration(duration)
+        # 5. Composición Final
+        final_video = CompositeVideoClip([visual_base] + subtitles, size=(target_w, target_h))
+        final_video = final_video.set_audio(final_audio)
         
-        logger.info(f"Renderizando video final en {output_path}...")
-        
-        ffmpeg_params = [
-            "-crf", "18", 
-            "-tune", "film",
-            "-b:v", "5M", 
-            "-maxrate", "8M",
-            "-bufsize", "10M"
-        ]
-        
-        # OPTIMIZACIÓN EXTREMA (Mejora 3): Renderizado por fragmentos para evitar OOM
-        # MoviePy a veces acumula memoria en videos largos. Usamos threads=1 para máxima estabilidad de RAM.
+        # 6. Renderizado Optimizado
+        # Usar preset 'ultrafast' y threads para acelerar el renderizado en Fly.io
         final_video.write_videofile(
-            str(output_path), 
+            output_path, 
             fps=24, 
             codec="libx264", 
             audio_codec="aac", 
-            logger=None, 
-            preset="ultrafast", 
-            threads=1, # Un solo hilo consume mucha menos RAM en MoviePy
-            ffmpeg_params=ffmpeg_params,
-            bitrate="3000k" # Limitar bitrate para reducir presión de buffer
+            threads=4, 
+            preset="ultrafast",
+            logger=None
         )
         
+        # Limpiar memoria
+        tts_audio.close()
         final_video.close()
         visual_base.close()
-        for c in clips:
-            try: c.close()
-            except: pass
-        tts_audio.close()
-        if 'tts_audio_padded' in locals():
-            try: tts_audio_padded.close()
-            except: pass
-        if 'bg_music' in locals(): 
-            try: bg_music.close()
-            except: pass
-
-        # LIMPIEZA INMEDIATA (Mejora 2): Borrar clips descargados tras el render
-        logger.info("🧹 Limpiando clips temporales procesados...")
-        for item in media_list:
-            p = item.get("path")
-            if p and Path(p).exists():
-                try:
-                    Path(p).unlink()
-                    logger.debug(f"Eliminado: {p}")
-                except Exception as e:
-                    logger.warning(f"No se pudo eliminar {p}: {e}")
+        for c in clips: c.close()
         
         return output_path
