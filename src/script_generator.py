@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # Cambiado a gemini-1.5-flash que es la versión estable recomendada para v1
-        # gemini-2.0-flash a menudo requiere v1beta o tiene restricciones en v1 según la región
+        # Usando gemini-1.5-flash que es la versión estable recomendada para v1
         self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={self.api_key}"
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,6 +88,7 @@ class ScriptGenerator:
             try:  
                 headers = {"Content-Type": "application/json"}
                 
+                # ELIMINADO: 'response_mime_type' de generationConfig ya que causa error 400 en v1
                 payload = {
                     "contents": [
                         {
@@ -96,10 +96,7 @@ class ScriptGenerator:
                                 {"text": prompt}
                             ]
                         }
-                    ],
-                    "generationConfig": {
-                        "response_mime_type": "application/json"
-                    }
+                    ]
                 }
   
                 response = requests.post(self.api_url, headers=headers, json=payload, timeout=timeout_seconds)  
