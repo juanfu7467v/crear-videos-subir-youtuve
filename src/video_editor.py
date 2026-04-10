@@ -7,7 +7,12 @@ from PIL import Image, ImageFilter as pil_filters
 import numpy as np
 
 # PARCHE: Esto obliga a que MoviePy encuentre la propiedad que busca
-Image.ANTIALIAS = Image.Resampling.LANCZOS 
+if not hasattr(Image, 'ANTIALIAS'):
+    try:
+        from PIL import Image
+        Image.ANTIALIAS = Image.Resampling.LANCZOS
+    except Exception:
+        pass
 
 from moviepy.editor import (
     VideoFileClip, ImageClip, AudioFileClip, concatenate_videoclips, 

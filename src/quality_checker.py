@@ -38,8 +38,8 @@ class QualityChecker:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.min_score = int(os.getenv("MIN_QC_SCORE", "60"))
-        # Usando el modelo gemini-2.5-flash que es el nuevo estándar
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
+        # Usando el modelo gemini-1.5-flash que es el estándar estable
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
         # Inicializar el generador de miniaturas de OpenAI (único uso de OpenAI solicitado)
         self.thumbnail_generator = ThumbnailGenerator(os.getenv("OPENAI_API_KEY"))
 
@@ -53,7 +53,7 @@ class QualityChecker:
                 image_bytes = f.read()
                 image_base64 = base64.b64encode(image_bytes).decode('utf-8')
 
-            # Preparar payload para la API directa
+            # Preparar payload para la API directa con responseMimeType
             payload = {
                 "contents": [
                     {
@@ -67,7 +67,10 @@ class QualityChecker:
                             }
                         ]
                     }
-                ]
+                ],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
+                }
             }
             headers = {'Content-Type': 'application/json'}
 

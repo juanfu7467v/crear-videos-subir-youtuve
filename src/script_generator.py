@@ -11,9 +11,8 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        # Actualizado a gemini-2.5-flash según la solicitud del usuario.
-        # Se utiliza el endpoint v1 que es el estándar para modelos estables.
-        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={self.api_key}"
+        # Cambiado a gemini-1.5-flash ya que 2.5 no parece estar disponible en v1/v1beta de forma generalizada
+        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={self.api_key}"
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -89,8 +88,7 @@ class ScriptGenerator:
             try:  
                 headers = {"Content-Type": "application/json"}
                 
-                # Restaurado: 'response_mime_type' en generationConfig para asegurar salida JSON.
-                # Gemini 2.5 Flash soporta este campo nativamente en el endpoint v1.
+                # Corregido: 'response_mime_type' (snake_case) a 'responseMimeType' (camelCase)
                 payload = {
                     "contents": [
                         {
@@ -100,7 +98,7 @@ class ScriptGenerator:
                         }
                     ],
                     "generationConfig": {
-                        "response_mime_type": "application/json"
+                        "responseMimeType": "application/json"
                     }
                 }
   

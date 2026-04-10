@@ -51,12 +51,28 @@ class TTSEngine:
         
         logger.info(f"Generando TTS con voz: {voice}")
         
-        try:
-            communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-            asyncio.run(communicate.save(output_path))
-        except Exception as e:
-            logger.error(f"Error en Edge-TTS: {e}")
-            raise e
+        import time
+        max_retries = 3
+        retry_delay = 5
+        for attempt in range(max_retries):
+            try:
+                communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+                asyncio.run(communicate.save(output_path))
+                # Verificar que el archivo se creó y no está vacío
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    return output_path
+                else:
+                    raise Exception("El archivo de audio generado está vacío o no existe.")
+            except Exception as e:
+                logger.error(f"Error en Edge-TTS (intento {attempt + 1}/{max_retries}): {e}")
+                if "429" in str(e) or "Rate limit" in str(e):
+                    logger.warning(f"Límite de cuota alcanzado en Edge-TTS. Reintentando en {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                elif attempt < max_retries - 1:
+                    time.sleep(1)
+                else:
+                    raise e
         return output_path
 
     def get_audio_duration(self, audio_path: str) -> float:
