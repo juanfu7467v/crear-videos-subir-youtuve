@@ -3,6 +3,7 @@ import random
 import requests
 from pathlib import Path
 from typing import List, Dict, Optional
+from src.utils import validate_video
 
 logger = logging.getLogger(__name__)
 
@@ -123,16 +124,20 @@ class ArchiveOrgDownloader:
             if video_meta and video_meta.get("url"):
                 filename = save_dir / f"{prefix}_archiveorg.mp4"
                 if self._download_file(video_meta["url"], str(filename)):
-                    return {
-                        "path": str(filename),
-                        "type": "video",
-                        "duration": video_meta["duration"],
-                        "keyword": keyword,
-                        "source": "archive.org",
-                        "title": result.get("title", keyword),
-                        "width": video_meta["width"],
-                        "height": video_meta["height"]
-                    }
+                    if validate_video(str(filename)):
+                        return {
+                            "path": str(filename),
+                            "type": "video",
+                            "duration": video_meta["duration"],
+                            "keyword": keyword,
+                            "source": "archive.org",
+                            "title": result.get("title", keyword),
+                            "width": video_meta["width"],
+                            "height": video_meta["height"]
+                        }
+                    else:
+                        logger.warning(f"Archivo de Archive.org corrupto o inválido: {filename}. Descartando.")
+                        if filename.exists(): filename.unlink()
         return None
 
     def _download_file(self, url: str, path: str) -> bool:

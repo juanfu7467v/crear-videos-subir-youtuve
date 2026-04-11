@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from PIL import Image, ImageFilter as pil_filters
 import numpy as np
+from src.utils import validate_video, cleanup_ffmpeg
 
 # PARCHE: Esto obliga a que MoviePy encuentre la propiedad que busca
 if not hasattr(Image, 'ANTIALIAS'):
@@ -58,8 +59,8 @@ class VideoEditor:
                 logger.warning(f"Clip {i} no encontrado o ruta vacía: {path_str}")
                 continue
             
-            if os.path.getsize(path_str) == 0:
-                logger.warning(f"Clip {i} tiene 0 bytes, saltando: {path_str}")
+            if not validate_video(path_str) and item.get("type", "video") == "video":
+                logger.warning(f"Clip {i} no es un video válido, saltando: {path_str}")
                 continue
             
             item_type = str(item.get("type", "video"))
@@ -77,8 +78,13 @@ class VideoEditor:
                         # target_resolution ayuda a reducir la carga de RAM al decodificar
                         raw_clip = VideoFileClip(path_str, audio=False, target_resolution=(target_h, target_w))
                     except Exception as ve:
-                        logger.warning(f"Video corrupto detectado ({path_str}): {ve}")
-                        continue
+                        logger.warning(f"Video corrupto detectado por MoviePy ({path_str}): {ve}")
+                        # Intentar usar como imagen si falla como video (algunos MP4 corruptos pueden leerse como frames)
+                        try:
+                            clip = ImageClip(path_str).set_duration(float(clip_duration))
+                            logger.info(f"Clip {i} cargado como imagen estática tras fallo de video.")
+                        except:
+                            continue
                     
                     raw_duration = float(raw_clip.duration)
                     if raw_duration < clip_duration:
@@ -245,20 +251,32 @@ class VideoEditor:
         
         # 6. Renderizado Optimizado
         # Usar preset 'ultrafast' y threads para acelerar el renderizado en Fly.io
-        final_video.write_videofile(
-            output_path, 
-            fps=24, 
-            codec="libx264", 
-            audio_codec="aac", 
-            threads=4, 
-            preset="ultrafast",
-            logger=None
-        )
-        
-        # Limpiar memoria
-        tts_audio.close()
-        final_video.close()
-        visual_base.close()
-        for c in clips: c.close()
+        try:
+            final_video.write_videofile(
+                output_path, 
+                fps=24, 
+                codec="libx264", 
+                audio_codec="aac", 
+                threads=4, 
+                preset="ultrafast",
+                logger=None
+            )
+        finally:
+            # Limpiar memoria SIEMPRE, incluso si falla el renderizado
+            logger.info("Limpiando recursos de MoviePy y FFMPEG...")
+            try:
+                tts_audio.close()
+                final_video.close()
+                visual_base.close()
+                for c in clips:
+                    try:
+                        c.close()
+                    except:
+                        pass
+                
+                # Limpieza adicional de procesos FFMPEG
+                cleanup_ffmpeg()
+            except Exception as ce:
+                logger.warning(f"Error durante la limpieza de recursos: {ce}")
         
         return output_path

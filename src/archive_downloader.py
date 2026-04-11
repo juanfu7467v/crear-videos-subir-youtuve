@@ -6,6 +6,7 @@ import time
 import re
 from pathlib import Path
 from typing import List, Dict, Optional
+from src.utils import validate_video
 
 logger = logging.getLogger(__name__)
 
@@ -262,15 +263,19 @@ class ArchiveDownloader:
             
             # Intentar descargar un fragmento de 10 segundos (ritmo stock)
             if self.download_fragment(video_info['url'], output_path, duration=10):
-                downloaded.append({
-                    "path": str(output_path),
-                    "type": "video",
-                    "duration": 10.0,
-                    "keyword": keyword,
-                    "source": "archive_org_smart",
-                    "title": video_info['title'],
-                    "width": video_info['width'],
-                    "height": video_info['height']
-                })
+                if validate_video(str(output_path)):
+                    downloaded.append({
+                        "path": str(output_path),
+                        "type": "video",
+                        "duration": 10.0,
+                        "keyword": keyword,
+                        "source": "archive_org_smart",
+                        "title": video_info['title'],
+                        "width": video_info['width'],
+                        "height": video_info['height']
+                    })
+                else:
+                    logger.warning(f"Fragmento de Archive.org corrupto o inválido: {output_path}. Descartando.")
+                    if output_path.exists(): output_path.unlink()
                 
         return downloaded
