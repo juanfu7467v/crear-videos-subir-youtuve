@@ -12,7 +12,7 @@ class ScriptGenerator:
     def __init__(self, api_key: str):
         self.api_key = api_key
         # Cambiado a gemini-1.5-flash ya que 2.5 no parece estar disponible en v1/v1beta de forma generalizada
-        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+        self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
