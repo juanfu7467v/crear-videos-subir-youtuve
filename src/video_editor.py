@@ -75,11 +75,9 @@ class VideoEditor:
                 if item_type == "video":
                     try:
                         # OPTIMIZACIÓN: Cargar solo el fragmento necesario y sin audio
-                        # target_resolution ayuda a reducir la carga de RAM al decodificar
                         raw_clip = VideoFileClip(path_str, audio=False, target_resolution=(target_h, target_w))
                     except Exception as ve:
                         logger.warning(f"Video corrupto detectado por MoviePy ({path_str}): {ve}")
-                        # Intentar usar como imagen si falla como video (algunos MP4 corruptos pueden leerse como frames)
                         try:
                             clip = ImageClip(path_str).set_duration(float(clip_duration))
                             logger.info(f"Clip {i} cargado como imagen estática tras fallo de video.")
@@ -90,7 +88,6 @@ class VideoEditor:
                     if raw_duration < clip_duration:
                         clip = raw_clip.loop(duration=clip_duration)
                     else:
-                        # Si el clip es más largo que lo que necesitamos (segment_duration), cortarlo
                         safe_end = min(raw_duration - 0.1, clip_duration)
                         clip = raw_clip.subclip(0, safe_end).set_duration(clip_duration)
                     
@@ -103,40 +100,34 @@ class VideoEditor:
                     clip = clip.fx(vfx.resize, lambda t: 1 + 0.02*t)
                 
                 # MEJORAS VISUALES: Nitidez, Brillo y Contraste
-                clip = clip.fx(vfx.lum_contrast, lum=12, contrast=0.1) # Simula brillo 0.05 y contraste 1.1
+                clip = clip.fx(vfx.lum_contrast, lum=12, contrast=0.1)
                 
                 # Redimensionar según formato
                 if is_short:
-                    # TÉCNICA: Fondo desenfocado para Shorts
                     bg = clip.resize(height=target_h)
                     if bg.w < target_w:
                         bg = bg.resize(width=target_w)
                     
                     bg = bg.crop(x_center=bg.w/2, y_center=bg.h/2, width=target_w, height=target_h)
                     
-                    # OPTIMIZACIÓN EXTREMA (Mejora 3): Reducir resolución del fondo drásticamente para ahorrar RAM
-                    # Un radio de 15 en una imagen pequeña da el mismo efecto visual que en una grande pero con 1/16 del costo de memoria
-                    small_h = 360 # Resolución muy baja para el fondo desenfocado
+                    small_h = 360
                     small_w = int(target_w * (small_h / target_h))
                     
                     bg = bg.resize(height=small_h)
                     bg = bg.fl_image(apply_blur)
-                    bg = bg.resize(height=target_h) # Reescalar a 1080x1920 (el blur oculta el pixelado)
-                    bg = bg.fx(vfx.colorx, 0.7) # Oscurecer un poco el fondo
+                    bg = bg.resize(height=target_h)
+                    bg = bg.fx(vfx.colorx, 0.7)
                     
                     fg = clip.resize(width=target_w)
                     if fg.h > target_h:
                         fg = fg.resize(height=target_h)
                     
-                    # Usar use_bgclip=True en CompositeVideoClip para optimizar memoria si el primer clip es el fondo
                     clip = CompositeVideoClip([bg, fg.set_position("center")], size=(target_w, target_h), use_bgclip=True)
                 else:
-                    # OPTIMIZACIÓN (Mejora 3): Para videos largos, usar redimensionamiento simple sin margen si es posible
                     clip = clip.resize(height=target_h)
                     if clip.w > target_w:
                         clip = clip.crop(x_center=clip.w/2, y_center=clip.h/2, width=target_w, height=target_h)
                     elif clip.w < target_w:
-                        # Si es más estrecho, reescalar al ancho para evitar el costoso .margin() en CPU
                         clip = clip.resize(width=target_w)
                         if clip.h > target_h:
                             clip = clip.crop(y_center=clip.h/2, height=target_h)
@@ -173,9 +164,7 @@ class VideoEditor:
         visual_base = visual_base.set_duration(duration)
         
         # 3. Añadir Música de Fondo
-        # Asegurar que el audio TTS dure lo mismo que el video si es Short
         if is_short and float(tts_audio.duration) < duration:
-            # Rellenar con silencio si el audio es más corto para llegar a 60s
             silence_duration = duration - float(tts_audio.duration)
             silence = AudioArrayClip(np.zeros((int(44100 * silence_duration), 2)), fps=44100)
             tts_audio_padded = concatenate_audioclips([tts_audio, silence])
@@ -199,14 +188,13 @@ class VideoEditor:
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
-        # 4. Añadir Subtítulos (Estilo Moderno TikTok/Reels)
+        # 4. Añadir Subtítulos (Estilo Filmora Go / Moderno)
         full_script = str(script_data.get('full_script', ''))
         subtitles = []
         
-        # Dividir por palabras para un efecto más dinámico y resaltar palabras clave
         words = full_script.split()
         if words:
-            # Agrupar palabras en bloques pequeños (2-4 palabras) para que la lectura sea rápida y moderna
+            # Agrupar palabras para mayor legibilidad
             word_groups = []
             group_size = 3
             for i in range(0, len(words), group_size):
@@ -214,40 +202,74 @@ class VideoEditor:
             
             time_per_group = float(duration) / len(word_groups)
             
-            # Palabras clave a resaltar (pueden ser aleatorias o basadas en longitud)
-            keywords = ["increíble", "espectacular", "misterio", "secreto", "película", "acción", "terror", "final", "sorpresa"]
+            # Palabras clave para resaltar
+            keywords = ["increíble", "espectacular", "misterio", "secreto", "película", "acción", "terror", "final", "sorpresa", "top", "curiosidades"]
             
+            # Definir estilos aleatorios (Colores y Animaciones)
+            styles = [
+                {'color': 'white', 'stroke': 'black', 'anim': 'pop'},
+                {'color': 'yellow', 'stroke': 'black', 'anim': 'zoom_in'},
+                {'color': 'cyan', 'stroke': 'black', 'anim': 'bounce'},
+                {'color': '#FF00FF', 'stroke': 'white', 'anim': 'pop'} # Magenta
+            ]
+            
+            # Fuente personalizada si existe, sino fallback
+            font_path = "assets/fonts/bold.ttf"
+            if not os.path.exists(font_path):
+                font_path = 'Liberation-Sans-Bold'
+
+            # Ajustar posición y tamaño según formato
+            # Shorts -> Inferior (80% del alto), tamaño un poco más pequeño (relativo al ancho)
+            # Largo -> Inferior (85% del alto), tamaño estándar
+            y_pos = target_h * 0.8 if is_short else target_h * 0.85
+            font_size = 90 if is_short else 70 
+
             for i, group in enumerate(word_groups):
                 try:
                     start_t = float(i * time_per_group)
                     
-                    # Determinar si este grupo contiene una palabra clave o resaltar aleatoriamente
-                    should_highlight = any(kw in group.lower() for kw in keywords) or (i % 4 == 0)
-                    text_color = 'yellow' if should_highlight else 'white'
-                    font_size = 110 if is_short else 80
+                    # Rotar estilos aleatoriamente para cada grupo
+                    current_style = random.choice(styles)
                     
-                    # Crear el clip de texto sin fondo negro, con borde y sombra
+                    # Resaltar si contiene keyword
+                    should_highlight = any(kw in group.lower() for kw in keywords)
+                    text_color = 'yellow' if should_highlight else current_style['color']
+                    
                     txt_clip = TextClip(
-                        group.upper(), # Mayúsculas para más impacto
+                        group.upper(),
                         fontsize=font_size, 
                         color=text_color,
-                        font='Liberation-Sans-Bold',
+                        font=font_path,
                         method='caption',
                         size=(target_w * 0.85, None),
                         align='center',
-                        stroke_color='black',
+                        stroke_color=current_style['stroke'],
                         stroke_width=2.5
-                    ).set_start(start_t).set_duration(float(time_per_group)).set_position(('center', target_h * 0.65))
+                    ).set_start(start_t).set_duration(float(time_per_group)).set_position(('center', y_pos))
                     
-                    # Animación "Pop" mejorada (zoom in rápido y ligero rebote)
-                    def pop_effect(t):
-                        if t < 0.15:
-                            return 0.7 + (0.4 * (t / 0.15)) # De 0.7 a 1.1 en 0.15s
-                        elif t < 0.25:
-                            return 1.1 - (0.1 * ((t - 0.15) / 0.1)) # De 1.1 a 1.0 en 0.1s
-                        return 1.0
+                    # Aplicar animaciones dinámicas tipo Filmora Go
+                    anim_type = current_style['anim']
                     
-                    txt_clip = txt_clip.fx(vfx.resize, pop_effect)
+                    if anim_type == 'pop':
+                        def anim_effect(t):
+                            if t < 0.15:
+                                return 0.5 + (0.6 * (t / 0.15)) # 0.5 a 1.1
+                            elif t < 0.25:
+                                return 1.1 - (0.1 * ((t - 0.15) / 0.1)) # 1.1 a 1.0
+                            return 1.0
+                        txt_clip = txt_clip.fx(vfx.resize, anim_effect)
+                        
+                    elif anim_type == 'zoom_in':
+                        # Zoom constante suave
+                        txt_clip = txt_clip.fx(vfx.resize, lambda t: 1.0 + 0.15 * (t/time_per_group))
+                        
+                    elif anim_type == 'bounce':
+                        def anim_effect(t):
+                            if t < 0.2:
+                                return 1.0 + 0.2 * np.sin(t * np.pi * 5)
+                            return 1.0
+                        txt_clip = txt_clip.fx(vfx.resize, anim_effect)
+
                     subtitles.append(txt_clip)
                 except Exception as e:
                     logger.warning(f"Error creando subtítulo {i}: {e}")
@@ -257,7 +279,6 @@ class VideoEditor:
         final_video = final_video.set_audio(final_audio)
         
         # 6. Renderizado Optimizado
-        # Usar preset 'ultrafast' y threads para acelerar el renderizado en Fly.io
         try:
             final_video.write_videofile(
                 output_path, 
@@ -269,7 +290,6 @@ class VideoEditor:
                 logger=None
             )
         finally:
-            # Limpiar memoria SIEMPRE, incluso si falla el renderizado
             logger.info("Limpiando recursos de MoviePy y FFMPEG...")
             try:
                 tts_audio.close()
@@ -280,8 +300,6 @@ class VideoEditor:
                         c.close()
                     except:
                         pass
-                
-                # Limpieza adicional de procesos FFMPEG
                 cleanup_ffmpeg()
             except Exception as ce:
                 logger.warning(f"Error durante la limpieza de recursos: {ce}")
