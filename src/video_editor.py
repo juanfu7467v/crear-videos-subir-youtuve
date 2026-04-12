@@ -199,48 +199,55 @@ class VideoEditor:
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
-        # 4. Añadir Subtítulos (Estilo mejorado basado en video de referencia)
+        # 4. Añadir Subtítulos (Estilo Moderno TikTok/Reels)
         full_script = str(script_data.get('full_script', ''))
         subtitles = []
-        # Dividir por frases más cortas para que el efecto "pop" sea más dinámico
-        raw_sentences = re.split(r'[.,!?\n]', full_script)
-        sentences = [s.strip() for s in raw_sentences if s.strip()]
         
-        final_sentences = []
-        for s in sentences:
-            # Acortar frases para que quepan bien con el recuadro de fondo
-            while len(s) > 40:
-                split_idx = s[:40].rfind(' ')
-                if split_idx == -1: split_idx = 40
-                final_sentences.append(s[:split_idx].strip())
-                s = s[split_idx:].strip()
-            if s: final_sentences.append(s)
-
-        if final_sentences:
-            time_per_sentence = float(duration) / len(final_sentences)
-            for i, sentence in enumerate(final_sentences):
+        # Dividir por palabras para un efecto más dinámico y resaltar palabras clave
+        words = full_script.split()
+        if words:
+            # Agrupar palabras en bloques pequeños (2-4 palabras) para que la lectura sea rápida y moderna
+            word_groups = []
+            group_size = 3
+            for i in range(0, len(words), group_size):
+                word_groups.append(" ".join(words[i:i+group_size]))
+            
+            time_per_group = float(duration) / len(word_groups)
+            
+            # Palabras clave a resaltar (pueden ser aleatorias o basadas en longitud)
+            keywords = ["increíble", "espectacular", "misterio", "secreto", "película", "acción", "terror", "final", "sorpresa"]
+            
+            for i, group in enumerate(word_groups):
                 try:
-                    fs = 100 if is_short else 70
-                    start_t = float(i * time_per_sentence)
+                    start_t = float(i * time_per_group)
                     
+                    # Determinar si este grupo contiene una palabra clave o resaltar aleatoriamente
+                    should_highlight = any(kw in group.lower() for kw in keywords) or (i % 4 == 0)
+                    text_color = 'yellow' if should_highlight else 'white'
+                    font_size = 110 if is_short else 80
+                    
+                    # Crear el clip de texto sin fondo negro, con borde y sombra
                     txt_clip = TextClip(
-                        sentence, 
-                        fontsize=fs, 
-                        color='white',
+                        group.upper(), # Mayúsculas para más impacto
+                        fontsize=font_size, 
+                        color=text_color,
                         font='Liberation-Sans-Bold',
                         method='caption',
-                        size=(target_w * 0.8, None),
+                        size=(target_w * 0.85, None),
                         align='center',
-                        bg_color='black'
-                    ).set_start(start_t).set_duration(float(time_per_sentence)).set_position(('center', target_h * 0.75))
+                        stroke_color='black',
+                        stroke_width=2.5
+                    ).set_start(start_t).set_duration(float(time_per_group)).set_position(('center', target_h * 0.65))
                     
-                    # Animación "Pop" (ligero zoom al aparecer)
-                    def zoom_effect(t):
-                        if t < 0.1:
-                            return 0.8 + 2 * t # De 0.8 a 1.0 en 0.1 segundos
+                    # Animación "Pop" mejorada (zoom in rápido y ligero rebote)
+                    def pop_effect(t):
+                        if t < 0.15:
+                            return 0.7 + (0.4 * (t / 0.15)) # De 0.7 a 1.1 en 0.15s
+                        elif t < 0.25:
+                            return 1.1 - (0.1 * ((t - 0.15) / 0.1)) # De 1.1 a 1.0 en 0.1s
                         return 1.0
                     
-                    txt_clip = txt_clip.fx(vfx.resize, zoom_effect)
+                    txt_clip = txt_clip.fx(vfx.resize, pop_effect)
                     subtitles.append(txt_clip)
                 except Exception as e:
                     logger.warning(f"Error creando subtítulo {i}: {e}")
