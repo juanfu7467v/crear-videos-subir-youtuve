@@ -59,7 +59,7 @@ class ScriptGenerator:
             f"ESTILO REQUERIDO: Manipulación psicológica, intriga de élite y retención máxima.\n\n"
             "REGLA CRÍTICA PARA EL TÍTULO:\n"
             "Comienza con 2 hashtags de alto tráfico seguidos de un título que genere FOMO (miedo a perderse algo).\n"
-            "Ejemplo: \'#cine #misterio Lo que el 99% ignoró de esta escena\'\n"
+            "Ejemplo: '#cine #misterio Lo que el 99% ignoró de esta escena')"
             "ESTRUCTURA OBLIGATORIA DEL CONTENIDO (RETENCIÓN RADICAL):\n"
             "1. HOOK EXPLOSIVO (0-5s): Una bofetada verbal. Algo que cuestione la inteligencia del espectador o le prometa un secreto prohibido.\n"
             "2. DESARROLLO DE TENSIÓN: Frases rápidas, estilo \'ritmo cardiaco\'. Cada frase debe obligar a escuchar la siguiente. Cero relleno. Habla de \'nosotros\' contra \'ellos\'.\n"
