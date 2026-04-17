@@ -28,7 +28,7 @@ logger = setup_logging()
 
 class VideoAutoPipeline:
     def __init__(self):
-        self.script_gen      = ScriptGenerator(os.getenv("GEMINI_API_KEY", ""))
+        self.script_gen      = ScriptGenerator()
         self.tts_engine      = TTSEngine()
         self.media_fetcher   = MediaFetcher(
             os.getenv("PEXELS_API_KEY", ""), 
@@ -36,7 +36,7 @@ class VideoAutoPipeline:
             os.getenv("YOUTUBE_API_KEY", "")
         )
         self.video_editor    = VideoEditor()
-        self.quality_checker = QualityChecker(os.getenv("GEMINI_API_KEY", ""))
+        self.quality_checker = QualityChecker()
         self.yt_uploader     = YouTubeUploader()
         self.scheduler       = VideoScheduler()
         self.keep_alive_thread = None

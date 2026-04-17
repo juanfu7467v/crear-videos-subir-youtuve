@@ -16,6 +16,7 @@ import requests
 from pathlib import Path
 from typing import Optional
 from src.thumbnail_generator import ThumbnailGenerator
+from src.gemini_api_manager import gemini_api_manager
 
 logger = logging.getLogger(__name__)
 
@@ -35,17 +36,15 @@ Evalúa los siguientes aspectos y responde ÚNICAMENTE en JSON válido:
 """
 
 class QualityChecker:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
+    def __init__(self):
         self.min_score = int(os.getenv("MIN_QC_SCORE", "60"))
-        # Usando el modelo gemini-1.5-flash que es el estándar estable
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
         # Inicializar el generador de miniaturas de OpenAI (único uso de OpenAI solicitado)
         self.thumbnail_generator = ThumbnailGenerator(os.getenv("OPENAI_API_KEY"))
 
     def _analyze_frame(self, frame_path: str) -> Optional[dict]:
-        if not self.api_key:
-            return None
+        # La clave API se obtiene y rota a través del manager
+        # No es necesario verificar self.api_key aquí, el manager lo maneja.
+        pass
 
         try:
             # Leer imagen y codificar en base64
@@ -72,9 +71,11 @@ class QualityChecker:
                     "responseMimeType": "application/json"
                 }
             }
-            headers = {'Content-Type': 'application/json'}
+            headers = {"Content-Type": "application/json"}
 
-            response = requests.post(self.url, headers=headers, json=payload)
+            # Usar el manager para obtener la URL con la clave actual
+            api_url = gemini_api_manager.get_api_url(model="gemini-1.5-flash")
+            response = requests.post(api_url, headers=headers, json=payload)
             response.raise_for_status()
             
             data = response.json()
@@ -90,8 +91,13 @@ class QualityChecker:
                 logger.error(f"Respuesta inesperada de Gemini en QC: {data}")
                 return None
 
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error de red/petición en Gemini QC: {e}")
+            gemini_api_manager.rotate_key() # Rotar clave en caso de error de red
+            return None
         except Exception as e:
             logger.debug(f"⚠️ Error analizando frame: {e}")
+            gemini_api_manager.rotate_key() # Rotar clave en caso de error inesperado
             return None
 
     def check_video(self, video_path: str, expected_keywords: list = None, num_frames: int = 3, script_data: dict = None) -> dict:
@@ -119,7 +125,7 @@ class QualityChecker:
         frames = self._extract_frames(video_path, num_frames)
         result["frames_analyzed"] = len(frames)
 
-        if frames and self.api_key:
+        if frames and gemini_api_manager.api_keys:
             frame_results = []
             for f_path in frames:
                 res = self._analyze_frame(f_path)
@@ -133,7 +139,7 @@ class QualityChecker:
         
         # MEJORA: Solo generar miniatura si NO es Short
         if not is_short:
-            if self.api_key and script_data:
+            if gemini_api_manager.api_keys and script_data:
                 logger.info("Generando miniatura con IA para video largo...")
                 ai_thumb = self._generate_ai_thumbnail(script_data, str(thumb))
                 if ai_thumb:
