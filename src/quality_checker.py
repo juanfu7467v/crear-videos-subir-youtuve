@@ -137,10 +137,10 @@ class QualityChecker:
         # Manejo de miniaturas
         thumb = Path(video_path).with_suffix(".jpg")
         
-        # MEJORA: Generación de miniaturas (IA) con OpenAI para videos largos y Shorts
-        if self.thumbnail_generator.api_key and script_data:
-            logger.info(f"Generando miniatura con IA (OpenAI) para {'Short' if is_short else 'video largo'}...")
-            ai_thumb = self._generate_ai_thumbnail(script_data, str(thumb), is_short=is_short)
+        # MEJORA: Generación de miniaturas (IA) con OpenAI ÚNICAMENTE para videos largos
+        if not is_short and self.thumbnail_generator.api_key and script_data:
+            logger.info("Generando miniatura con IA (OpenAI) para video largo...")
+            ai_thumb = self._generate_ai_thumbnail(script_data, str(thumb), is_short=False)
             if ai_thumb:
                 result["thumbnail_path"] = ai_thumb
             elif frames:
@@ -149,10 +149,12 @@ class QualityChecker:
                 shutil.copy(frames[0], thumb)
                 result["thumbnail_path"] = str(thumb)
         elif frames:
-            # Fallback a frame del video si no hay API Key de OpenAI
+            # Para Shorts o si no hay API Key, usar un frame del video como miniatura
             import shutil
             shutil.copy(frames[0], thumb)
             result["thumbnail_path"] = str(thumb)
+            if is_short:
+                logger.info("Short detectado: Se utilizará un frame del video como miniatura.")
 
         # Limpieza de frames temporales
         if frames:

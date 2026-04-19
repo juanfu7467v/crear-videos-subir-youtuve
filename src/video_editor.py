@@ -104,25 +104,30 @@ class VideoEditor:
                 # MEJORAS VISUALES: Nitidez, Brillo y Contraste
                 clip = clip.fx(vfx.lum_contrast, lum=12, contrast=0.1)
                 
-                # Redimensionar según formato
+                # Redimensionar según formato (SIN DEFORMACIÓN)
                 if is_short:
+                    # Fondo desenfocado (Blur background)
                     bg = clip.resize(height=target_h)
                     if bg.w < target_w:
                         bg = bg.resize(width=target_w)
                     
+                    # Recortar fondo para llenar el 9:16
                     bg = bg.crop(x_center=bg.w/2, y_center=bg.h/2, width=target_w, height=target_h)
                     
+                    # Aplicar desenfoque al fondo
                     small_h = 360
-                    small_w = int(target_w * (small_h / target_h))
-                    
                     bg = bg.resize(height=small_h)
                     bg = bg.fl_image(apply_blur)
                     bg = bg.resize(height=target_h)
-                    bg = bg.fx(vfx.colorx, 0.7)
+                    bg = bg.fx(vfx.colorx, 0.6) # Un poco más oscuro para que resalte el frente
                     
-                    fg = clip.resize(width=target_w)
-                    if fg.h > target_h:
-                        fg = fg.resize(height=target_h)
+                    # Frente (Foreground) - Manteniendo proporción original
+                    # Si el clip es más ancho que alto (típico 16:9), ajustamos al ancho del Short
+                    if clip.w / clip.h > target_w / target_h:
+                        fg = clip.resize(width=target_w)
+                    else:
+                        # Si es más alto (poco común), ajustamos al alto
+                        fg = clip.resize(height=target_h)
                     
                     clip = CompositeVideoClip([bg, fg.set_position("center")], size=(target_w, target_h), use_bgclip=True)
                 else:
@@ -222,20 +227,29 @@ class VideoEditor:
         # Palabras clave para resaltar (Hormozi style usa mucho amarillo/verde/rojo)
         keywords_high = ["increíble", "espectacular", "misterio", "secreto", "poder", "dinero", "éxito", "letal", "peligro", "prohibido"]
         
-        # MEJORA: Los subtítulos deben empezar después de la miniatura en Shorts
-        current_time_sub = 1.0 if (is_short and thumbnail_path and os.path.exists(thumbnail_path)) else 0.0
+        # MEJORA: Sincronización precisa de subtítulos
+        # El audio real del TTS suele ser más corto que los 60s forzados en Shorts.
+        real_audio_duration = float(tts_audio.duration)
+        
+        # Ajustar el punto de inicio (después de la miniatura si existe)
+        start_offset = 1.0 if (is_short and thumbnail_path and os.path.exists(thumbnail_path)) else 0.0
+        current_time_sub = start_offset
         
         # Si no hay segmented_script, usamos el full_script como fallback
         if not segmented_script:
             full_text = str(script_data.get('full_script', ''))
             words = full_text.split()
-            avg_word_duration = duration / max(len(words), 1)
-            # Agrupar en bloques de 1-2 palabras para estilo Hormozi
+            # Calculamos la duración media basada en el audio REAL, no en la duración forzada
+            avg_word_duration = real_audio_duration / max(len(words), 1)
             temp_segments = []
             for i in range(0, len(words), 2):
                 block = " ".join(words[i:i+2])
                 temp_segments.append({'segment_text': block, 'estimated_duration': avg_word_duration * 2})
             segmented_script = temp_segments
+
+        # Calcular factor de escala para ajustar duraciones estimadas a la duración REAL del audio
+        estimated_total = sum([float(s.get('estimated_duration', 2.0)) for s in segmented_script])
+        sync_factor = real_audio_duration / estimated_total if estimated_total > 0 else 1.0
 
         for i, segment in enumerate(segmented_script):
             try:
@@ -243,15 +257,16 @@ class VideoEditor:
                 if not text: continue
                 
                 try:
-                    seg_duration = float(segment.get('estimated_duration', 2.0))
+                    # Aplicamos el factor de sincronización a la duración estimada
+                    seg_duration = float(segment.get('estimated_duration', 2.0)) * sync_factor
                 except:
-                    seg_duration = 2.0
+                    seg_duration = 2.0 * sync_factor
                 
-                # Asegurar que no nos pasamos de la duración total
-                if current_time_sub + seg_duration > duration:
-                    seg_duration = max(0.1, duration - current_time_sub)
+                # Asegurar que no nos pasamos de la duración del audio real
+                if current_time_sub + seg_duration > (start_offset + real_audio_duration):
+                    seg_duration = max(0.01, (start_offset + real_audio_duration) - current_time_sub)
                 
-                # Dividir segmentos largos en palabras individuales para mayor dinamismo (Alex Hormozi style)
+                # Dividir segmentos largos en palabras individuales para mayor dinamismo
                 seg_words = text.split()
                 word_duration = seg_duration / max(len(seg_words), 1)
                 

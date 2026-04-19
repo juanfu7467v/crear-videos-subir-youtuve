@@ -139,14 +139,9 @@ class VideoAutoPipeline:
                 self._stop_keep_alive()
                 return
 
-            # 4. Control de Calidad y Miniatura (Movido antes de la edición para Shorts)
-            # MEJORA: Para Shorts, generamos la miniatura antes para insertarla en el video
+            # 4. Preparación de Miniatura (OpenAI desactivado para Shorts por petición)
             thumbnail_path = None
-            if is_short:
-                logger.info("4/6 Generando miniatura IA para Short (para insertar en video)...")
-                thumb_temp = str(output_dir / "thumb_ia.jpg")
-                thumbnail_path = self.quality_checker.thumbnail_generator.generate_thumbnail(script_data, thumb_temp, is_short=True)
-
+            
             # 5. Editar Video
             logger.info("5/6 Editando video final...")
             video_path = str(output_dir / "final_video.mp4")
