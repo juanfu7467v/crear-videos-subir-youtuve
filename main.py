@@ -139,21 +139,33 @@ class VideoAutoPipeline:
                 self._stop_keep_alive()
                 return
 
-            # 4. Editar Video
-            logger.info("4/6 Editando video final...")
+            # 4. Control de Calidad y Miniatura (Movido antes de la edición para Shorts)
+            # MEJORA: Para Shorts, generamos la miniatura antes para insertarla en el video
+            thumbnail_path = None
+            if is_short:
+                logger.info("4/6 Generando miniatura IA para Short (para insertar en video)...")
+                thumb_temp = str(output_dir / "thumb_ia.jpg")
+                thumbnail_path = self.quality_checker.thumbnail_generator.generate_thumbnail(script_data, thumb_temp, is_short=True)
+
+            # 5. Editar Video
+            logger.info("5/6 Editando video final...")
             video_path = str(output_dir / "final_video.mp4")
             self.video_editor.create_video(
                 audio_path=audio_path,
                 media_list=media_list,
                 script_data=script_data,
                 format_type=format_suggested,
-                output_path=video_path
+                output_path=video_path,
+                thumbnail_path=thumbnail_path # Pasamos la miniatura si existe
             )
             
-            # 5. Control de Calidad y Miniatura
-            logger.info("5/6 Realizando control de calidad y miniatura...")
+            # 6. Control de Calidad Final
+            logger.info("6/6 Realizando control de calidad...")
             qc_results = self.quality_checker.check_video(video_path, script_data=script_data)
-            thumbnail_path = qc_results.get('thumbnail_path')
+            
+            # Si no se generó miniatura antes (videos largos), se genera ahora
+            if not thumbnail_path:
+                thumbnail_path = qc_results.get('thumbnail_path')
             
             # MEJORA: Si es películas, intentar miniatura de TMDB primero
             if "películas" in categoria.lower():
@@ -162,18 +174,21 @@ class VideoAutoPipeline:
                 if self.media_fetcher.generate_thumbnail(thumbnail_search_term, video_title, tmdb_thumb, categoria=categoria):
                     thumbnail_path = tmdb_thumb
 
-            # 6. Subir a YouTube
-            logger.info("6/6 Programando subida a YouTube...")
+            # 7. Subir a YouTube
+            logger.info("7/7 Programando subida a YouTube...")
             publish_time = self.scheduler.calculate_publish_time(preferred_time=optimal_time)
             
             # Configuración SEO y Categoría YouTube
             yt_category = "1" if "películas" in categoria.lower() else "22"
             is_kids = "niños" in categoria.lower() or "infantil" in categoria.lower()
 
+            # MEJORA: En los videos Shorts, no incluir la descripción (viralidad)
+            final_description = "" if is_short else video_description
+
             video_url = self.yt_uploader.upload(
                 video_path=video_path,
                 title=video_title,
-                description=video_description,
+                description=final_description,
                 tags=script_data.get('tags', []),
                 channel_name=canal,
                 is_short=is_short,

@@ -33,7 +33,7 @@ class VideoEditor:
     def __init__(self):
         logger.info("Inicializando VideoEditor...")
 
-    def create_video(self, audio_path, media_list, script_data, format_type, output_path, music_dir="assets/music"):
+    def create_video(self, audio_path, media_list, script_data, format_type, output_path, music_dir="assets/music", thumbnail_path=None):
         # 1. Cargar Audio Principal (TTS) para determinar duración
         tts_audio = AudioFileClip(audio_path)
         duration = float(tts_audio.duration)
@@ -163,6 +163,20 @@ class VideoEditor:
                         break
 
         visual_base = concatenate_videoclips(clips, method="chain")
+        
+        # MEJORA: Insertar miniatura en el primer segundo para Shorts
+        if is_short and thumbnail_path and os.path.exists(thumbnail_path):
+            logger.info(f"Insertando miniatura en el primer segundo del Short: {thumbnail_path}")
+            thumb_clip = ImageClip(thumbnail_path).set_duration(1.0).set_start(0).resize(height=target_h)
+            if thumb_clip.w < target_w:
+                thumb_clip = thumb_clip.resize(width=target_w)
+            thumb_clip = thumb_clip.crop(x_center=thumb_clip.w/2, y_center=thumb_clip.h/2, width=target_w, height=target_h)
+            
+            # Desplazar el resto del video 1 segundo
+            visual_base = visual_base.set_start(1.0)
+            visual_base = CompositeVideoClip([thumb_clip, visual_base], size=(target_w, target_h))
+            duration += 1.0 # Aumentar duración total por el segundo de miniatura
+        
         visual_base = visual_base.set_duration(duration)
         
         # 3. Añadir Música de Fondo
@@ -208,7 +222,8 @@ class VideoEditor:
         # Palabras clave para resaltar (Hormozi style usa mucho amarillo/verde/rojo)
         keywords_high = ["increíble", "espectacular", "misterio", "secreto", "poder", "dinero", "éxito", "letal", "peligro", "prohibido"]
         
-        current_time_sub = 0.0
+        # MEJORA: Los subtítulos deben empezar después de la miniatura en Shorts
+        current_time_sub = 1.0 if (is_short and thumbnail_path and os.path.exists(thumbnail_path)) else 0.0
         
         # Si no hay segmented_script, usamos el full_script como fallback
         if not segmented_script:

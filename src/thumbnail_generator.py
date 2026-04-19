@@ -16,7 +16,7 @@ class ThumbnailGenerator:
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.url = "https://api.openai.com/v1/images/generations"
 
-    def generate_thumbnail(self, script_data: dict, output_path: str) -> Optional[str]:
+    def generate_thumbnail(self, script_data: dict, output_path: str, is_short: bool = False) -> Optional[str]:
         """
         Genera una miniatura atractiva usando DALL-E 3 de OpenAI.
         """
@@ -45,7 +45,7 @@ class ThumbnailGenerator:
                 "Texto: Máximo 3 palabras. Fuente 'Ultra-Bold'. Legibilidad perfecta en móviles (20% del tamaño de pantalla). "
                 "Ejemplos de texto: 'ESTÁN MINTIENDO', 'EL FIN.', 'NADIE VIO ESTO'. "
                 "Iluminación: Estilo cinematográfico oscuro (Rim lighting) con sombras dramáticas que den profundidad 3D. "
-                "📐 FORMATO: 1280 x 720 px, Relación 16:9, Calidad 4K fotorrealista. "
+                f"📐 FORMATO: {'720 x 1280 px, Relación 9:16 (VERTICAL)' if is_short else '1280 x 720 px, Relación 16:9 (HORIZONTAL)'}, Calidad 4K fotorrealista. "
                 "🚀 OBJETIVO FINAL: El usuario debe sentir que si no hace clic, se está perdiendo el secreto más grande de su vida. "
                 "⚠️ PROHIBICIÓN: Cero diseños planos. Prohibido el estilo corporativo. Evitar elementos genéricos. Prioriza la tensión visual."
             )
@@ -82,8 +82,12 @@ class ThumbnailGenerator:
                         if img.mode in ("RGBA", "P"):
                             img = img.convert("RGB")
 
-                        # --- AJUSTE DE TAMAÑO EXACTO 1280x720 (16:9) ---
-                        target_w, target_h = 1280, 720
+                        # --- AJUSTE DE TAMAÑO EXACTO ---
+                        if is_short:
+                            target_w, target_h = 720, 1280
+                        else:
+                            target_w, target_h = 1280, 720
+                            
                         target_ratio = target_w / target_h
                         img_w, img_h = img.size
                         img_ratio = img_w / img_h

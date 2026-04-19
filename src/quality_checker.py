@@ -137,29 +137,22 @@ class QualityChecker:
         # Manejo de miniaturas
         thumb = Path(video_path).with_suffix(".jpg")
         
-        # MEJORA: Generación de miniaturas (IA) únicamente para videos largos
-        # Los videos cortos (Shorts) no deben activar este proceso.
-        if not is_short:
-            # Solo activamos la generación con IA (OpenAI) para videos largos
-            if self.thumbnail_generator.api_key and script_data:
-                logger.info("Generando miniatura con IA (OpenAI) para video largo...")
-                ai_thumb = self._generate_ai_thumbnail(script_data, str(thumb))
-                if ai_thumb:
-                    result["thumbnail_path"] = ai_thumb
-                elif frames:
-                    # Fallback a frame del video si la IA falla
-                    import shutil
-                    shutil.copy(frames[0], thumb)
-                    result["thumbnail_path"] = str(thumb)
+        # MEJORA: Generación de miniaturas (IA) con OpenAI para videos largos y Shorts
+        if self.thumbnail_generator.api_key and script_data:
+            logger.info(f"Generando miniatura con IA (OpenAI) para {'Short' if is_short else 'video largo'}...")
+            ai_thumb = self._generate_ai_thumbnail(script_data, str(thumb), is_short=is_short)
+            if ai_thumb:
+                result["thumbnail_path"] = ai_thumb
             elif frames:
-                # Fallback a frame del video si no hay API Key de OpenAI
+                # Fallback a frame del video si la IA falla
                 import shutil
                 shutil.copy(frames[0], thumb)
                 result["thumbnail_path"] = str(thumb)
-        else:
-            # Para Shorts, YouTube genera automáticamente la miniatura o se usa el frame central
-            logger.info("Vídeo detectado como Short. Omitiendo generación de miniatura personalizada por IA.")
-            result["thumbnail_path"] = None
+        elif frames:
+            # Fallback a frame del video si no hay API Key de OpenAI
+            import shutil
+            shutil.copy(frames[0], thumb)
+            result["thumbnail_path"] = str(thumb)
 
         # Limpieza de frames temporales
         if frames:
@@ -167,13 +160,13 @@ class QualityChecker:
 
         return result
 
-    def _generate_ai_thumbnail(self, script_data: dict, output_path: str) -> Optional[str]:
+    def _generate_ai_thumbnail(self, script_data: dict, output_path: str, is_short: bool = False) -> Optional[str]:
         """
         Genera una miniatura atractiva usando OpenAI (DALL-E 3).
         """
         # Reemplazamos Gemini Imagen por OpenAI DALL-E 3 (más efectivo)
-        logger.info("Utilizando OpenAI para la generación de la miniatura...")
-        return self.thumbnail_generator.generate_thumbnail(script_data, output_path)
+        logger.info(f"Utilizando OpenAI para la generación de la miniatura ({'Short' if is_short else 'Largo'})...")
+        return self.thumbnail_generator.generate_thumbnail(script_data, output_path, is_short=is_short)
 
     def _extract_frames(self, video_path: str, num_frames: int = 3) -> list:
         frames = []
