@@ -117,7 +117,8 @@ class VideoAutoPipeline:
             is_short = "short" in format_suggested.lower()
             
             # Si es short, forzar 60s reales (Mejora 1)
-            target_fetch_duration = 60 if is_short else max(int(duration), 120)
+            # Si es video largo, usar la duración del audio (TTS)
+            target_fetch_duration = 60 if is_short else int(duration)
 
             media_list = self.media_fetcher.fetch_media_for_video(
                 segmented_script=script_data.get("segmented_script", []),

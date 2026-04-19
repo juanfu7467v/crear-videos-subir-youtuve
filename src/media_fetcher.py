@@ -87,6 +87,8 @@ class MediaFetcher:
         if is_short:
             target_duration = 60
             logger.info(f"Ajustando target_duration a exactamente {target_duration}s para Short.")
+        else:
+            logger.info(f"Manteniendo target_duration en {target_duration}s para video largo.")
 
         # Calculamos cuántos ciclos de 7-10-7 caben, pero pediremos suficientes clips para cubrir la duración
         # Si cada ciclo es ~17s, necesitamos target_duration / 17 ciclos.

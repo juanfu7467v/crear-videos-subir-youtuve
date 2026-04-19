@@ -44,6 +44,8 @@ class VideoEditor:
         if is_short:
             logger.info(f"Forzando duración de Short a 60.0s (Audio original: {duration:.2f}s)")
             duration = 60.0
+        else:
+            logger.info(f"Manteniendo duración de video largo en {duration:.2f}s")
 
         target_h = 1920 if is_short else 1080
         target_w = 1080 if is_short else 1920
