@@ -190,91 +190,100 @@ class VideoEditor:
         except Exception as e:
             logger.error(f"Error al añadir música de fondo: {e}")
 
-        # 4. Añadir Subtítulos (Estilo Filmora Go / Moderno)
-        full_script = str(script_data.get('full_script', ''))
+        # 4. Añadir Subtítulos Dinámicos (Estilo Alex Hormozi / Viral)
+        segmented_script = script_data.get('segmented_script', [])
         subtitles = []
         
-        words = full_script.split()
-        if words:
-            # Agrupar palabras para mayor legibilidad
-            word_groups = []
-            group_size = 3
-            for i in range(0, len(words), group_size):
-                word_groups.append(" ".join(words[i:i+group_size]))
-            
-            time_per_group = float(duration) / len(word_groups)
-            
-            # Palabras clave para resaltar
-            keywords = ["increíble", "espectacular", "misterio", "secreto", "película", "acción", "terror", "final", "sorpresa", "top", "curiosidades"]
-            
-            # Definir estilos aleatorios (Colores y Animaciones)
-            styles = [
-                {'color': 'white', 'stroke': 'black', 'anim': 'pop'},
-                {'color': 'yellow', 'stroke': 'black', 'anim': 'zoom_in'},
-                {'color': 'cyan', 'stroke': 'black', 'anim': 'bounce'},
-                {'color': '#FF00FF', 'stroke': 'white', 'anim': 'pop'} # Magenta
-            ]
-            
-            # Fuente personalizada si existe, sino fallback
-            font_path = "assets/fonts/bold.ttf"
-            if not os.path.exists(font_path):
-                font_path = 'Liberation-Sans-Bold'
+        # Fuente personalizada
+        font_path = "assets/fonts/bold.ttf"
+        if not os.path.exists(font_path):
+            font_path = 'Liberation-Sans-Bold'
 
-            # Ajustar posición y tamaño según formato
-            # Shorts -> Inferior (80% del alto), tamaño un poco más pequeño (relativo al ancho)
-            # Largo -> Inferior (85% del alto), tamaño estándar
-            y_pos = target_h * 0.8 if is_short else target_h * 0.85
-            font_size = 90 if is_short else 70 
+        # Ajustes de posición y tamaño (Hormozi style: Centro o ligeramente arriba del centro)
+        # Para Shorts: Centro del video (y=0.5)
+        # Para Largo: Parte inferior (y=0.8)
+        y_pos = target_h * 0.5 if is_short else target_h * 0.8
+        font_size = 110 if is_short else 80
 
-            for i, group in enumerate(word_groups):
+        # Palabras clave para resaltar (Hormozi style usa mucho amarillo/verde/rojo)
+        keywords_high = ["increíble", "espectacular", "misterio", "secreto", "poder", "dinero", "éxito", "letal", "peligro", "prohibido"]
+        
+        current_time_sub = 0.0
+        
+        # Si no hay segmented_script, usamos el full_script como fallback
+        if not segmented_script:
+            full_text = str(script_data.get('full_script', ''))
+            words = full_text.split()
+            avg_word_duration = duration / max(len(words), 1)
+            # Agrupar en bloques de 1-2 palabras para estilo Hormozi
+            temp_segments = []
+            for i in range(0, len(words), 2):
+                block = " ".join(words[i:i+2])
+                temp_segments.append({'segment_text': block, 'estimated_duration': avg_word_duration * 2})
+            segmented_script = temp_segments
+
+        for i, segment in enumerate(segmented_script):
+            try:
+                text = segment.get('segment_text', '').upper().strip()
+                if not text: continue
+                
                 try:
-                    start_t = float(i * time_per_group)
+                    seg_duration = float(segment.get('estimated_duration', 2.0))
+                except:
+                    seg_duration = 2.0
+                
+                # Asegurar que no nos pasamos de la duración total
+                if current_time_sub + seg_duration > duration:
+                    seg_duration = max(0.1, duration - current_time_sub)
+                
+                # Dividir segmentos largos en palabras individuales para mayor dinamismo (Alex Hormozi style)
+                seg_words = text.split()
+                word_duration = seg_duration / max(len(seg_words), 1)
+                
+                for j, word in enumerate(seg_words):
+                    word_start = current_time_sub + (j * word_duration)
                     
-                    # Rotar estilos aleatoriamente para cada grupo
-                    current_style = random.choice(styles)
-                    
-                    # Resaltar si contiene keyword
-                    should_highlight = any(kw in group.lower() for kw in keywords)
-                    text_color = 'yellow' if should_highlight else current_style['color']
+                    # Colores vibrantes estilo Hormozi
+                    is_special = any(kw.upper() in word for kw in keywords_high)
+                    color = 'yellow' if is_special else ('white' if j % 2 == 0 else '#00FF00') # Blanco y Verde neón
                     
                     txt_clip = TextClip(
-                        group.upper(),
-                        fontsize=font_size, 
-                        color=text_color,
+                        word,
+                        fontsize=font_size + (20 if is_special else 0), 
+                        color=color,
                         font=font_path,
                         method='caption',
-                        size=(target_w * 0.85, None),
+                        size=(target_w * 0.9, None),
                         align='center',
-                        stroke_color=current_style['stroke'],
-                        stroke_width=2.5
-                    ).set_start(start_t).set_duration(float(time_per_group)).set_position(('center', y_pos))
+                        stroke_color='black',
+                        stroke_width=3
+                    ).set_start(word_start).set_duration(word_duration).set_position(('center', y_pos))
                     
-                    # Aplicar animaciones dinámicas tipo Filmora Go
-                    anim_type = current_style['anim']
+                    # --- ANIMACIONES VIRALES (Alex Hormozi Style) ---
+                    # 1. Pop In con rotación ligera aleatoria
+                    angle = random.uniform(-3, 3)
+                    txt_clip = txt_clip.rotate(angle)
                     
-                    if anim_type == 'pop':
-                        def anim_effect(t):
-                            if t < 0.15:
-                                return 0.5 + (0.6 * (t / 0.15)) # 0.5 a 1.1
-                            elif t < 0.25:
-                                return 1.1 - (0.1 * ((t - 0.15) / 0.1)) # 1.1 a 1.0
-                            return 1.0
-                        txt_clip = txt_clip.fx(vfx.resize, anim_effect)
-                        
-                    elif anim_type == 'zoom_in':
-                        # Zoom constante suave
-                        txt_clip = txt_clip.fx(vfx.resize, lambda t: 1.0 + 0.15 * (t/time_per_group))
-                        
-                    elif anim_type == 'bounce':
-                        def anim_effect(t):
-                            if t < 0.2:
-                                return 1.0 + 0.2 * np.sin(t * np.pi * 5)
-                            return 1.0
-                        txt_clip = txt_clip.fx(vfx.resize, anim_effect)
-
+                    # 2. Efecto de Escala (Zoom enérgico al aparecer)
+                    def scale_anim(t):
+                        # Aparece de 0.5 a 1.2 en 0.1s, luego se estabiliza en 1.0
+                        if t < 0.07:
+                            return 0.5 + (0.7 * (t / 0.07))
+                        elif t < 0.12:
+                            return 1.2 - (0.2 * ((t - 0.07) / 0.05))
+                        else:
+                            # Sutil movimiento de pulso si el locutor habla lento
+                            return 1.0 + 0.02 * np.sin(t * 10)
+                            
+                    txt_clip = txt_clip.fx(vfx.resize, scale_anim)
+                    
                     subtitles.append(txt_clip)
-                except Exception as e:
-                    logger.warning(f"Error creando subtítulo {i}: {e}")
+                
+                current_time_sub += seg_duration
+                if current_time_sub >= duration: break
+                
+            except Exception as e:
+                logger.warning(f"Error creando subtítulo dinámico {i}: {e}")
 
         # 5. Composición Final
         final_video = CompositeVideoClip([visual_base] + subtitles, size=(target_w, target_h))

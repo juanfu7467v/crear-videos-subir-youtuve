@@ -137,25 +137,28 @@ class QualityChecker:
         # Manejo de miniaturas
         thumb = Path(video_path).with_suffix(".jpg")
         
-        # MEJORA: Solo generar miniatura si NO es Short
+        # MEJORA: Generación de miniaturas (IA) únicamente para videos largos
+        # Los videos cortos (Shorts) no deben activar este proceso.
         if not is_short:
-            if gemini_api_manager.api_keys and script_data:
-                logger.info("Generando miniatura con IA para video largo...")
+            # Solo activamos la generación con IA (OpenAI) para videos largos
+            if self.thumbnail_generator.api_key and script_data:
+                logger.info("Generando miniatura con IA (OpenAI) para video largo...")
                 ai_thumb = self._generate_ai_thumbnail(script_data, str(thumb))
                 if ai_thumb:
                     result["thumbnail_path"] = ai_thumb
                 elif frames:
-                    # Fallback a frame del video
+                    # Fallback a frame del video si la IA falla
                     import shutil
                     shutil.copy(frames[0], thumb)
                     result["thumbnail_path"] = str(thumb)
             elif frames:
-                # Si no hay API key pero hay frames, usar el primer frame como miniatura para videos largos
+                # Fallback a frame del video si no hay API Key de OpenAI
                 import shutil
                 shutil.copy(frames[0], thumb)
                 result["thumbnail_path"] = str(thumb)
         else:
-            logger.info("Vídeo detectado como Short. Omitiendo generación de miniatura personalizada.")
+            # Para Shorts, YouTube genera automáticamente la miniatura o se usa el frame central
+            logger.info("Vídeo detectado como Short. Omitiendo generación de miniatura personalizada por IA.")
             result["thumbnail_path"] = None
 
         # Limpieza de frames temporales
