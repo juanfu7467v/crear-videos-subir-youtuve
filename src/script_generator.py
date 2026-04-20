@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 
 class ScriptGenerator:
     def __init__(self):
-        # La clave API se obtiene y rota a través del manager
         # El usuario ha especificado que el token se llama GROK_TOKEN en Secrets
-        self.grok_api_key = os.getenv("GROK_TOKEN")
+        # Intentamos cargar tanto GROK_TOKEN como GROK_API_KEY por compatibilidad
+        self.grok_api_key = os.getenv("GROK_TOKEN") or os.getenv("GROK_API_KEY")
 
     def _call_llama_fallback(self, prompt: str, voz: str) -> Optional[Dict[str, Any]]:
         """Llamada de fallback a Llama 3 (vía X.AI/Grok) en caso de que Gemini falle."""
         if not self.grok_api_key:
-            logger.warning("GROK_TOKEN no configurado. Fallback a Llama 3 no disponible.")
+            logger.warning("GROK_TOKEN/GROK_API_KEY no configurado. Fallback a Llama 3 no disponible.")
             return None
 
         logger.info("Intentando generar guion con Llama 3 (Fallback)...")
@@ -29,41 +29,37 @@ class ScriptGenerator:
             "Authorization": f"Bearer {self.grok_api_key}"
         }
         
-        payload = {
-            "model": "llama-3-70b-instruct", # Ajustado para usar Llama 3 según requerimiento
-            "messages": [
-                {"role": "system", "content": "Eres un experto en guiones de YouTube. Responde exclusivamente con un objeto JSON válido."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.7,
-            "response_format": {"type": "json_object"}
-        }
+        # Lista de modelos a intentar en el fallback
+        fallback_models = ["llama-3-70b-instruct", "grok-beta"]
+        
+        for model in fallback_models:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "Eres un experto en guiones de YouTube. Responde exclusivamente con un objeto JSON válido."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "response_format": {"type": "json_object"}
+            }
 
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=120)
-            
-            # Si el modelo específico falla, intentar con grok-beta como respaldo del respaldo
-            if response.status_code != 200:
-                logger.warning(f"Fallo con llama-3-70b-instruct ({response.status_code}). Intentando con grok-beta...")
-                payload["model"] = "grok-beta"
+            try:
                 response = requests.post(url, headers=headers, json=payload, timeout=120)
-
-            response.raise_for_status()
-            data = response.json()
-            
-            if 'choices' in data and len(data['choices']) > 0:
-                content = data['choices'][0]['message']['content']
-                raw = content.strip()
-                # Limpiar posibles bloques de código markdown
-                raw = re.sub(r'```json\s*|\s*```', '', raw)
-                result = json.loads(raw)
-                
-                # Asegurar que la voz sea la correcta si no viene en el JSON
-                if 'voice' not in result:
-                    result['voice'] = voz
-                return result
-        except Exception as e:
-            logger.error(f"Error en fallback de Llama 3: {e}")
+                if response.status_code == 200:
+                    data = response.json()
+                    if 'choices' in data and len(data['choices']) > 0:
+                        content = data['choices'][0]['message']['content']
+                        raw = content.strip()
+                        raw = re.sub(r'```json\s*|\s*```', '', raw)
+                        result = json.loads(raw)
+                        if 'voice' not in result:
+                            result['voice'] = voz
+                        logger.info(f"✅ Guion generado exitosamente con el modelo de fallback: {model}")
+                        return result
+                else:
+                    logger.warning(f"Fallo con el modelo {model} (Status: {response.status_code}). Respuesta: {response.text}")
+            except Exception as e:
+                logger.error(f"Error intentando fallback con modelo {model}: {e}")
         
         return None
 
@@ -138,12 +134,14 @@ class ScriptGenerator:
 
         for attempt in range(max_retries):
             try:
-                # Nueva autenticación según requerimiento
+                # Autenticación mediante header x-goog-api-key
                 headers = {
                     "Content-Type": "application/json",
                     "x-goog-api-key": gemini_api_manager.get_current_key()
                 }
 
+                # CORRECCIÓN: 'response_mime_type' en lugar de 'responseMimeType'
+                # para la API de Gemini 1.5/2.5 Flash
                 payload = {
                     "contents": [
                         {
@@ -153,7 +151,7 @@ class ScriptGenerator:
                         }
                     ],
                     "generationConfig": {
-                        "responseMimeType": "application/json"
+                        "response_mime_type": "application/json"
                     }
                 }
 
@@ -169,6 +167,8 @@ class ScriptGenerator:
 
                 if response.status_code == 400:
                     logger.error(f"Error 400 (Bad Request) en Gemini. Respuesta: {response.text}")
+                    # Si es un error 400, probablemente el payload esté mal, intentamos fallback directamente
+                    break
 
                 response.raise_for_status()
                 data = response.json()
@@ -187,9 +187,13 @@ class ScriptGenerator:
                     gemini_api_manager.rotate_key()
                     time.sleep(retry_delay)
                 else:
-                    # FALLBACK A LLAMA 3
-                    logger.warning("Todos los intentos con Gemini fallaron. Iniciando fallback a Llama 3...")
-                    llama_result = self._call_llama_fallback(prompt, voz)
-                    if llama_result:
-                        return llama_result
-                    raise Exception(f"Fallo crítico: Ni Gemini ni Llama 3 pudieron generar el guion.")
+                    # Agotados los reintentos, salimos para el fallback
+                    break
+        
+        # FALLBACK A LLAMA 3 / GROK
+        logger.warning("Gemini no pudo procesar la solicitud. Iniciando fallback a Llama 3 / Grok...")
+        llama_result = self._call_llama_fallback(prompt, voz)
+        if llama_result:
+            return llama_result
+            
+        raise Exception(f"Fallo crítico: Ni Gemini ni el sistema de fallback pudieron generar el guion.")
