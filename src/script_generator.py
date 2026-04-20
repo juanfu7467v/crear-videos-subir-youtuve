@@ -12,12 +12,52 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self):
         # La clave API se obtiene y rota a través del manager
-        pass
+        self.grok_api_key = os.getenv("GROK_API_KEY")
+
+    def _call_grok_fallback(self, prompt: str, voz: str) -> Optional[Dict[str, Any]]:
+        """Llamada de fallback a Grok (X.AI) en caso de que Gemini falle."""
+        if not self.grok_api_key:
+            logger.warning("Grok API Key no configurada. Fallback no disponible.")
+            return None
+
+        logger.info("Intentando generar guion con Grok (Fallback)...")
+        url = "https://api.x.ai/v1/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.grok_api_key}"
+        }
+        
+        payload = {
+            "model": "grok-beta", # O el modelo de Grok que prefieras
+            "messages": [
+                {"role": "system", "content": "Eres un experto en guiones de YouTube. Responde solo con JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"}
+        }
+
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'choices' in data and len(data['choices']) > 0:
+                content = data['choices'][0]['message']['content']
+                raw = content.strip()
+                raw = re.sub(r'```json\s*|\s*```', '', raw)
+                result = json.loads(raw)
+                # Asegurar que la voz sea la correcta si no viene en el JSON
+                if 'voice' not in result:
+                    result['voice'] = voz
+                return result
+        except Exception as e:
+            logger.error(f"Error en fallback de Grok: {e}")
+        
+        return None
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Genera un guion optimizado para YouTube utilizando la API de Gemini.
-        Recibe un diccionario con los datos necesarios.
+        Genera un guion optimizado para YouTube utilizando la API de Gemini con fallback a Grok.
         """
         topic = input_data.get("tema_recomendado", "Sin tema")
         canal = input_data.get("canal", "CHANNEL_NAME")
@@ -86,7 +126,11 @@ class ScriptGenerator:
 
         for attempt in range(max_retries):
             try:
-                headers = {"Content-Type": "application/json"}
+                # Nueva autenticación según requerimiento
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": gemini_api_manager.get_current_key()
+                }
 
                 payload = {
                     "contents": [
@@ -101,46 +145,39 @@ class ScriptGenerator:
                     }
                 }
 
-                # Usar el manager para obtener la URL con la clave actual
                 api_url = gemini_api_manager.get_api_url(model="gemini-2.5-flash")
                 response = requests.post(api_url, headers=headers, json=payload, timeout=timeout_seconds)
 
-                # Manejo específico de errores de servidor o cuotas (500, 502, 503, 504, 429)
                 if response.status_code in [500, 502, 503, 504, 429]:
                     logger.warning(f"Error temporal de API Gemini ({response.status_code}) en intento {attempt + 1}. Reintentando en {retry_delay}s...")
-                    gemini_api_manager.rotate_key() # Rotar clave en caso de error
+                    gemini_api_manager.rotate_key()
                     time.sleep(retry_delay)
                     retry_delay *= 1.5
                     continue
 
-                # Si es un error 400, registrar el cuerpo de la respuesta para diagnóstico
                 if response.status_code == 400:
                     logger.error(f"Error 400 (Bad Request) en Gemini. Respuesta: {response.text}")
 
                 response.raise_for_status()
-
                 data = response.json()
 
                 if 'candidates' in data and len(data['candidates']) > 0:
                     text_response = data['candidates'][0]['content']['parts'][0]['text']
                     raw = text_response.strip()
-                    # Limpiar posibles etiquetas markdown si la IA las incluye a pesar de generationConfig
                     raw = re.sub(r'```json\s*|\s*```', '', raw)
                     return json.loads(raw)
                 else:
                     raise Exception(f"Respuesta inesperada de Gemini: {data}")
 
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Error de red/petición en intento {attempt + 1}: {e}")
-                gemini_api_manager.rotate_key() # Rotar clave en caso de error de red
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                else:
-                    raise Exception(f"Fallo crítico tras {max_retries} intentos de red: {e}")
             except Exception as e:
-                logger.error(f"Error inesperado en intento {attempt + 1}: {e}")
-                gemini_api_manager.rotate_key() # Rotar clave en caso de error inesperado
+                logger.error(f"Error en intento {attempt + 1} con Gemini: {e}")
                 if attempt < max_retries - 1:
+                    gemini_api_manager.rotate_key()
                     time.sleep(retry_delay)
                 else:
-                    raise Exception(f"No se pudo generar el guion después de {max_retries} intentos: {e}")
+                    # FALLBACK A GROK
+                    logger.warning("Todos los intentos con Gemini fallaron. Iniciando fallback a Grok...")
+                    grok_result = self._call_grok_fallback(prompt, voz)
+                    if grok_result:
+                        return grok_result
+                    raise Exception(f"Fallo crítico: Ni Gemini ni Grok pudieron generar el guion.")

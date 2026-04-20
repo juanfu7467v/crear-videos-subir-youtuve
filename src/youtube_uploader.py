@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 from src.oauth2_utils import get_valid_oauth2_data
 
 try:
@@ -23,17 +23,42 @@ class YouTubeUploader:
         self._initialized = False
         self._current_channel = None
         
-        # Mapeo estricto según requerimientos:
-        # El campo 'canal' del JSON puede venir como el nombre de la variable técnica
-        # o como el identificador CHANNEL_NAME.
+        # Mapeo inicial (mantenido por compatibilidad)
         self.channel_map = {
             "CHANNEL_NAME": "YOUTUBE_CREDENTIALS_FILE",
             "YOUTUBE_CREDENTIALS_FILE": "YOUTUBE_CREDENTIALS_FILE",
             "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2": "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
         }
 
+    def _get_credentials_var_name(self, channel_input: str) -> str:
+        """Determina el nombre de la variable de entorno para las credenciales de un canal."""
+        clean_input = str(channel_input).strip()
+        
+        # 1. Verificar si ya es una variable de entorno conocida (escalabilidad dinámica)
+        # El patrón es YOUTUBE_CREDENTIALS_FILE_<CHANNEL_NAME>
+        # Pero para los canales originales mantenemos sus nombres específicos
+        
+        if clean_input == "CHANNEL_NAME" or clean_input == "YOUTUBE_CREDENTIALS_FILE":
+            return "YOUTUBE_CREDENTIALS_FILE"
+        
+        if "Criterio" in clean_input or clean_input == "CHANNEL_NAME_2" or clean_input == "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2":
+            return "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
+        
+        # 2. Escalabilidad dinámica: CHANNEL_NAME_3 -> YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_3
+        # Si el input es CHANNEL_NAME_X, buscamos YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_X
+        if clean_input.startswith("CHANNEL_NAME_"):
+            return f"YOUTUBE_CREDENTIALS_FILE_{clean_input}"
+        
+        # 3. Fallback: Si no coincide con lo anterior, intentamos ver si existe como variable de entorno directa
+        # o si es un nombre de canal que tiene una variable asociada siguiendo el patrón
+        potential_var = f"YOUTUBE_CREDENTIALS_FILE_{clean_input.upper().replace(' ', '_')}"
+        if os.getenv(potential_var):
+            return potential_var
+            
+        return "YOUTUBE_CREDENTIALS_FILE" # Fallback final al canal 1
+
     def _load_credentials_from_secrets(self, channel_input: str):
-        """Carga credenciales desde el secreto de Fly usando mapeo estricto."""
+        """Carga credenciales desde el secreto de Fly con soporte para múltiples canales."""
         
         # PRIORIDAD 1: Usar el nuevo secreto YOUTUBE_OAUTH2_DATA unificado (si existe)
         oauth2_data = get_valid_oauth2_data()
@@ -55,31 +80,21 @@ class YouTubeUploader:
             except Exception as e:
                 logger.error(f"Error procesando el nuevo secreto unificado: {e}")
         
-        # PRIORIDAD 2: Mapeo estricto de la entrada del JSON a la variable técnica
-        # Limpiamos la entrada por si acaso
-        clean_input = str(channel_input).strip()
+        # PRIORIDAD 2: Mapeo dinámico de canales
+        creds_env_var = self._get_credentials_var_name(channel_input)
         
-        # Caso especial: Si la entrada es "El Criterio" o contiene espacios, 
-        # forzamos el mapeo a la variable correcta de ese canal.
-        if "Criterio" in clean_input:
-            creds_env_var = "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"
-        elif "Jota" in clean_input or clean_input == "CHANNEL_NAME":
-            creds_env_var = "YOUTUBE_CREDENTIALS_FILE"
-        else:
-            # Intentar usar el mapa directo o la entrada tal cual si ya es técnica
-            creds_env_var = self.channel_map.get(clean_input, clean_input)
-        
-        # Validación final: Solo permitimos las dos variables técnicas conocidas
-        if creds_env_var not in ["YOUTUBE_CREDENTIALS_FILE", "YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_2"]:
-            logger.warning(f"Entrada de canal '{clean_input}' no reconocida. Intentando fallback a YOUTUBE_CREDENTIALS_FILE.")
-            creds_env_var = "YOUTUBE_CREDENTIALS_FILE"
-
-        logger.info(f"Cargando credenciales desde el secret técnico: {creds_env_var}")
+        logger.info(f"Cargando credenciales para canal '{channel_input}' desde el secret: {creds_env_var}")
         creds_json = os.getenv(creds_env_var)
         
         if not creds_json:
-            logger.error(f"ERROR: No se encontró el secret {creds_env_var} en el entorno de Fly.io.")
-            return None
+            logger.error(f"ERROR: No se encontró el secret {creds_env_var} en el entorno.")
+            # Si falló el dinámico, intentar con el canal 1 por defecto
+            if creds_env_var != "YOUTUBE_CREDENTIALS_FILE":
+                logger.warning("Intentando fallback al canal principal (YOUTUBE_CREDENTIALS_FILE)")
+                creds_json = os.getenv("YOUTUBE_CREDENTIALS_FILE")
+            
+            if not creds_json:
+                return None
 
         try:
             data = json.loads(creds_json)

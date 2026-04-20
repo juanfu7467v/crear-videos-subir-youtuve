@@ -1,7 +1,6 @@
 import os
 import logging
 import threading
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +61,9 @@ class GeminiAPIManager:
             logger.warning(f"Rotando a la siguiente clave API de Gemini. Nueva clave en índice: {self.current_key_index}")
             return new_key
 
-    def get_api_url(self, model: str = "gemini-1.5-flash") -> str:
-        current_key = self.get_current_key()
-        return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={current_key}"
+    def get_api_url(self, model: str = "gemini-2.5-flash") -> str:
+        # Endpoint actualizado según requerimiento
+        return f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
 
 # Instancia global para ser usada en toda la aplicación
 gemini_api_manager = GeminiAPIManager()
