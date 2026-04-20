@@ -12,25 +12,23 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self):
         # El usuario ha especificado que el token se llama GROK_TOKEN en Secrets
-        # Intentamos cargar tanto GROK_TOKEN como GROK_API_KEY por compatibilidad
         self.grok_api_key = os.getenv("GROK_TOKEN") or os.getenv("GROK_API_KEY")
 
     def _call_llama_fallback(self, prompt: str, voz: str) -> Optional[Dict[str, Any]]:
-        """Llamada de fallback a Llama 3 (vía X.AI/Grok) en caso de que Gemini falle."""
+        """Llamada de fallback a modelos de X.AI en caso de que Gemini falle."""
         if not self.grok_api_key:
-            logger.warning("GROK_TOKEN/GROK_API_KEY no configurado. Fallback a Llama 3 no disponible.")
+            logger.warning("GROK_TOKEN/GROK_API_KEY no configurado. Fallback no disponible.")
             return None
 
-        logger.info("Intentando generar guion con Llama 3 (Fallback)...")
-        # Usamos el endpoint de X.AI que soporta Llama 3 o modelos compatibles
+        logger.info("Intentando generar guion con modelos de X.AI (Fallback)...")
         url = "https://api.x.ai/v1/chat/completions"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.grok_api_key}"
         }
         
-        # Lista de modelos a intentar en el fallback
-        fallback_models = ["llama-3-70b-instruct", "grok-beta"]
+        # Nombres de modelos corregidos para X.AI (Grok)
+        fallback_models = ["grok-2-latest", "grok-2-1212", "grok-beta"]
         
         for model in fallback_models:
             payload = {
@@ -65,7 +63,7 @@ class ScriptGenerator:
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Genera un guion optimizado para YouTube utilizando la API de Gemini con fallback a Llama 3.
+        Genera un guion optimizado para YouTube utilizando la API de Gemini con fallback a X.AI.
         """
         topic = input_data.get("tema_recomendado", "Sin tema")
         canal = input_data.get("canal", "CHANNEL_NAME")
@@ -132,16 +130,15 @@ class ScriptGenerator:
         retry_delay = 10
         timeout_seconds = 120
 
+        # Intentar Gemini primero
         for attempt in range(max_retries):
             try:
-                # Autenticación mediante header x-goog-api-key
                 headers = {
                     "Content-Type": "application/json",
                     "x-goog-api-key": gemini_api_manager.get_current_key()
                 }
 
-                # CORRECCIÓN: 'response_mime_type' en lugar de 'responseMimeType'
-                # para la API de Gemini 1.5/2.5 Flash
+                # Payload simplificado para máxima compatibilidad con el endpoint estable
                 payload = {
                     "contents": [
                         {
@@ -149,10 +146,7 @@ class ScriptGenerator:
                                 {"text": prompt}
                             ]
                         }
-                    ],
-                    "generationConfig": {
-                        "response_mime_type": "application/json"
-                    }
+                    ]
                 }
 
                 api_url = gemini_api_manager.get_api_url(model="gemini-2.5-flash")
@@ -166,8 +160,7 @@ class ScriptGenerator:
                     continue
 
                 if response.status_code == 400:
-                    logger.error(f"Error 400 (Bad Request) en Gemini. Respuesta: {response.text}")
-                    # Si es un error 400, probablemente el payload esté mal, intentamos fallback directamente
+                    logger.error(f"Error 400 en Gemini. Respuesta: {response.text}. Saltando al fallback.")
                     break
 
                 response.raise_for_status()
@@ -176,7 +169,12 @@ class ScriptGenerator:
                 if 'candidates' in data and len(data['candidates']) > 0:
                     text_response = data['candidates'][0]['content']['parts'][0]['text']
                     raw = text_response.strip()
+                    # Limpiar markdown
                     raw = re.sub(r'```json\s*|\s*```', '', raw)
+                    # Extraer el primer objeto JSON si hay texto adicional
+                    match = re.search(r'\{.*\}', raw, re.DOTALL)
+                    if match:
+                        return json.loads(match.group())
                     return json.loads(raw)
                 else:
                     raise Exception(f"Respuesta inesperada de Gemini: {data}")
@@ -187,13 +185,12 @@ class ScriptGenerator:
                     gemini_api_manager.rotate_key()
                     time.sleep(retry_delay)
                 else:
-                    # Agotados los reintentos, salimos para el fallback
                     break
         
-        # FALLBACK A LLAMA 3 / GROK
-        logger.warning("Gemini no pudo procesar la solicitud. Iniciando fallback a Llama 3 / Grok...")
-        llama_result = self._call_llama_fallback(prompt, voz)
-        if llama_result:
-            return llama_result
+        # FALLBACK A X.AI (Grok)
+        logger.warning("Gemini no disponible. Iniciando fallback a X.AI...")
+        xai_result = self._call_llama_fallback(prompt, voz)
+        if xai_result:
+            return xai_result
             
-        raise Exception(f"Fallo crítico: Ni Gemini ni el sistema de fallback pudieron generar el guion.")
+        raise Exception(f"Fallo crítico: Ni Gemini ni el sistema de fallback (X.AI) pudieron generar el guion.")
