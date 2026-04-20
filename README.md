@@ -4,10 +4,12 @@ Sistema automatizado para la creación de videos (Shorts y largos) utilizando la
 
 ## 🚀 Mejoras Recientes
 
-- **Eliminación de YouTube v3 & yt-dlp**: Se ha eliminado completamente la dependencia de la API de búsqueda de YouTube y la herramienta de descarga `yt-dlp` para evitar fallos de descarga y bloqueos.
-- **Integración con Peliprex API**: Nueva lógica de búsqueda y descarga de clips utilizando la API interna de Peliprex.
-- **Descarga Optimizada**: Implementación de descargas parciales mediante `ffmpeg` (HTTP Range Requests), permitiendo extraer fragmentos de menos de 7 segundos directamente desde el stream original.
-- **Eficiencia de Recursos**: Optimizado para un uso máximo de 2 GB de RAM y ahorro significativo de ancho de banda.
+- **🤖 Actualización de Gemini AI**: Se ha implementado el endpoint estable `gemini-2.5-flash` con autenticación oficial mediante headers (`x-goog-api-key`).
+- **🔁 Fallback de IA (Llama 3)**: Sistema de respaldo automático. Si Gemini falla por cuota o errores de red, el sistema utiliza automáticamente **Llama 3** (vía `GROK_TOKEN`) para garantizar la continuidad.
+- **📺 Escalabilidad de Canales**: Estructura preparada para gestionar múltiples canales de YouTube de forma dinámica y sencilla.
+- **Eliminación de YouTube v3 & yt-dlp**: Se ha eliminado la dependencia de búsqueda de YouTube y `yt-dlp` para evitar bloqueos.
+- **Integración con Peliprex API**: Nueva lógica de búsqueda y descarga de clips cinematográficos.
+- **Descarga Optimizada**: Uso de `ffmpeg` para extraer fragmentos específicos directamente desde el stream original.
 
 ## 🛠️ Configuración (Fly.io)
 
@@ -15,31 +17,49 @@ El sistema utiliza las siguientes variables de entorno:
 
 | Variable | Descripción |
 |----------|-------------|
-| `GEMINI_API_KEY` | Para la generación de guiones y control de calidad. |
+| `GEMINI_API_KEY` | Clave principal para generación de guiones. |
+| `GEMINI_API_KEY_B, C...` | Claves adicionales para rotación automática. |
+| `GROK_TOKEN` | Token para el fallback con **Llama 3**. |
 | `PEXELS_API_KEY` | Fallback para clips de stock. |
 | `PIXABAY_API_KEY`| Fallback secundario para clips de stock. |
-| `YOUTUBE_OAUTH2_DATA` | JSON con credenciales OAuth2 para la subida final a YouTube. |
+| `YOUTUBE_OAUTH2_DATA` | (Opcional) JSON unificado para subida a YouTube. |
+
+## 📺 Cómo agregar más canales de YouTube
+
+El sistema permite escalar a un número ilimitado de canales siguiendo estos pasos:
+
+1. **Obtener las Credenciales**: Debes tener el JSON de las credenciales OAuth2 (formato `authorized_user_info`) para el nuevo canal.
+2. **Configurar el Secreto**: Sube el JSON a Fly.io (o tu entorno) usando el prefijo `YOUTUBE_CREDENTIALS_FILE_` seguido del identificador del canal.
+   - Ejemplo para un tercer canal:
+     ```bash
+     fly secrets set YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_3='{"token": "...", "refresh_token": "...", ...}'
+     ```
+3. **Uso en Peticiones**: Al enviar una solicitud al endpoint `/trigger-video`, simplemente especifica el identificador en el campo `canal`:
+   ```json
+   {
+     "tema_recomendado": "Matrix",
+     "canal": "CHANNEL_NAME_3"
+   }
+   ```
+   *El sistema buscará automáticamente la variable `YOUTUBE_CREDENTIALS_FILE_CHANNEL_NAME_3`.*
 
 ## ⚙️ Funcionamiento
 
 1. **Trigger**: El sistema recibe un POST en `/trigger-video`.
-2. **Búsqueda**: Utiliza `https://peliprex-31wrsa.fly.dev/search?q={termino}` para encontrar la película.
-3. **Descarga**: Extrae fragmentos aleatorios de la película (puntos de inicio variados, duración < 7s) usando `ffmpeg`.
-4. **Edición**: Ensambla el video con audio TTS, música de fondo y subtítulos.
-5. **Upload**: Sube el resultado final a YouTube.
+2. **IA (Guion)**: Genera el guion con Gemini. Si falla, cambia automáticamente a **Llama 3**.
+3. **Búsqueda**: Utiliza la API de Peliprex para encontrar material visual de la película.
+4. **Descarga**: Extrae fragmentos aleatorios usando `ffmpeg`.
+5. **Edición**: Ensambla el video con audio TTS, música y subtítulos.
+6. **Upload**: Sube el video al canal de YouTube especificado dinámicamente.
 
 ## 📦 Despliegue
 
 1. Clona el repositorio.
-2. Configura tus secretos en Fly.io:
+2. Configura tus secretos:
    ```bash
-   fly secrets set GEMINI_API_KEY=tu_key PEXELS_API_KEY=tu_key PIXABAY_API_KEY=tu_key YOUTUBE_OAUTH2_DATA='{"token": "...", "refresh_token": "...", ...}'
+   fly secrets set GEMINI_API_KEY=... GROK_TOKEN=... PEXELS_API_KEY=...
    ```
-3. Asegúrate de tener el volumen para persistencia de datos (logs y tokens):
-   ```bash
-   fly volumes create el_tio_jota_data --size 5
-   ```
-4. Despliega:
+3. Despliega:
    ```bash
    fly deploy
    ```

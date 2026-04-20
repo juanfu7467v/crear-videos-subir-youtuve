@@ -12,15 +12,17 @@ logger = logging.getLogger(__name__)
 class ScriptGenerator:
     def __init__(self):
         # La clave API se obtiene y rota a través del manager
-        self.grok_api_key = os.getenv("GROK_API_KEY")
+        # El usuario ha especificado que el token se llama GROK_TOKEN en Secrets
+        self.grok_api_key = os.getenv("GROK_TOKEN")
 
-    def _call_grok_fallback(self, prompt: str, voz: str) -> Optional[Dict[str, Any]]:
-        """Llamada de fallback a Grok (X.AI) en caso de que Gemini falle."""
+    def _call_llama_fallback(self, prompt: str, voz: str) -> Optional[Dict[str, Any]]:
+        """Llamada de fallback a Llama 3 (vía X.AI/Grok) en caso de que Gemini falle."""
         if not self.grok_api_key:
-            logger.warning("Grok API Key no configurada. Fallback no disponible.")
+            logger.warning("GROK_TOKEN no configurado. Fallback a Llama 3 no disponible.")
             return None
 
-        logger.info("Intentando generar guion con Grok (Fallback)...")
+        logger.info("Intentando generar guion con Llama 3 (Fallback)...")
+        # Usamos el endpoint de X.AI que soporta Llama 3 o modelos compatibles
         url = "https://api.x.ai/v1/chat/completions"
         headers = {
             "Content-Type": "application/json",
@@ -28,36 +30,46 @@ class ScriptGenerator:
         }
         
         payload = {
-            "model": "grok-beta", # O el modelo de Grok que prefieras
+            "model": "llama-3-70b-instruct", # Ajustado para usar Llama 3 según requerimiento
             "messages": [
-                {"role": "system", "content": "Eres un experto en guiones de YouTube. Responde solo con JSON."},
+                {"role": "system", "content": "Eres un experto en guiones de YouTube. Responde exclusivamente con un objeto JSON válido."},
                 {"role": "user", "content": prompt}
             ],
+            "temperature": 0.7,
             "response_format": {"type": "json_object"}
         }
 
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=120)
+            
+            # Si el modelo específico falla, intentar con grok-beta como respaldo del respaldo
+            if response.status_code != 200:
+                logger.warning(f"Fallo con llama-3-70b-instruct ({response.status_code}). Intentando con grok-beta...")
+                payload["model"] = "grok-beta"
+                response = requests.post(url, headers=headers, json=payload, timeout=120)
+
             response.raise_for_status()
             data = response.json()
             
             if 'choices' in data and len(data['choices']) > 0:
                 content = data['choices'][0]['message']['content']
                 raw = content.strip()
+                # Limpiar posibles bloques de código markdown
                 raw = re.sub(r'```json\s*|\s*```', '', raw)
                 result = json.loads(raw)
+                
                 # Asegurar que la voz sea la correcta si no viene en el JSON
                 if 'voice' not in result:
                     result['voice'] = voz
                 return result
         except Exception as e:
-            logger.error(f"Error en fallback de Grok: {e}")
+            logger.error(f"Error en fallback de Llama 3: {e}")
         
         return None
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Genera un guion optimizado para YouTube utilizando la API de Gemini con fallback a Grok.
+        Genera un guion optimizado para YouTube utilizando la API de Gemini con fallback a Llama 3.
         """
         topic = input_data.get("tema_recomendado", "Sin tema")
         canal = input_data.get("canal", "CHANNEL_NAME")
@@ -175,9 +187,9 @@ class ScriptGenerator:
                     gemini_api_manager.rotate_key()
                     time.sleep(retry_delay)
                 else:
-                    # FALLBACK A GROK
-                    logger.warning("Todos los intentos con Gemini fallaron. Iniciando fallback a Grok...")
-                    grok_result = self._call_grok_fallback(prompt, voz)
-                    if grok_result:
-                        return grok_result
-                    raise Exception(f"Fallo crítico: Ni Gemini ni Grok pudieron generar el guion.")
+                    # FALLBACK A LLAMA 3
+                    logger.warning("Todos los intentos con Gemini fallaron. Iniciando fallback a Llama 3...")
+                    llama_result = self._call_llama_fallback(prompt, voz)
+                    if llama_result:
+                        return llama_result
+                    raise Exception(f"Fallo crítico: Ni Gemini ni Llama 3 pudieron generar el guion.")
