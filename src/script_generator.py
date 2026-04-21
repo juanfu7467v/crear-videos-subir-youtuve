@@ -116,9 +116,10 @@ class ScriptGenerator:
         Ordenados por prioridad práctica para este caso de uso.
         """
         return [
-            "grok-4.20-reasoning",   # ejemplo oficial actual para texto estructurado/reasoning
-            "grok-4.20",             # familia actual 4.20
-            "grok-4",                # alias estable recomendado por xAI
+            "grok-4.20-reasoning",   # Flagship reasoning model
+            "grok-4.20",             # Alias for latest stable 4.20
+            "grok-4.20-non-reasoning", # Fast 4.20 variant
+            "grok-4",                # Stable alias for Grok 4 series
             "grok-4-1-fast-reasoning",
             "grok-4-1-fast",
             "grok-3",
