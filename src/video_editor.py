@@ -172,15 +172,17 @@ class VideoEditor:
         # MEJORA: Insertar miniatura en el primer segundo para Shorts
         if is_short and thumbnail_path and os.path.exists(thumbnail_path):
             logger.info(f"Insertando miniatura en el primer segundo del Short: {thumbnail_path}")
+            # La miniatura debe ser llamativa y estar al inicio
             thumb_clip = ImageClip(thumbnail_path).set_duration(1.0).set_start(0).resize(height=target_h)
             if thumb_clip.w < target_w:
                 thumb_clip = thumb_clip.resize(width=target_w)
             thumb_clip = thumb_clip.crop(x_center=thumb_clip.w/2, y_center=thumb_clip.h/2, width=target_w, height=target_h)
             
-            # Desplazar el resto del video 1 segundo
+            # El video base ya tiene sus clips concatenados. Lo ponemos encima de la miniatura 
+            # pero desplazado 1 segundo para que la miniatura sea lo primero que se vea.
             visual_base = visual_base.set_start(1.0)
             visual_base = CompositeVideoClip([thumb_clip, visual_base], size=(target_w, target_h))
-            duration += 1.0 # Aumentar duración total por el segundo de miniatura
+            duration += 1.0 # Ajustamos la duración total
         
         visual_base = visual_base.set_duration(duration)
         

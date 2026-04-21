@@ -26,28 +26,25 @@ class ThumbnailGenerator:
 
         try:
             title = script_data.get('title', 'Curiosidades')
-            keywords = script_data.get('keywords', '')
-            if isinstance(keywords, list):
-                keywords = ", ".join(keywords)
-
-            # Prompt optimizado para miniaturas virales de YouTube (Mejorado)
             description = script_data.get('description', '')
+            
+            # Prompt optimizado para miniaturas virales de YouTube
+            # Se enfoca en generar curiosidad, ser llamativo y atraer clics.
             prompt = (
-                "Actúa como un psicólogo de masas y experto en CTR de YouTube con más de 50 canales millonarios. "
-                "Crea una miniatura de alto impacto diseñada para la 'parada de pulgar' instantánea. "
-                f"Basado en esta descripción: {description}. "
-                "🔥 ESTRATEGIA DE MANIPULACIÓN VISUAL: "
-                "1. COMPOSICIÓN: Aplica la regla de tercios con un sujeto dominante a un lado. El fondo debe contar una historia de misterio o caos. "
-                "2. PSICOLOGÍA DEL COLOR: Usa contrastes agresivos de 'Poder y Peligro' (Amarillo/Negro, Rojo/Cian, Neón/Oscuridad profunda). Saturación al máximo. "
-                "3. EMOCIÓN PRIMAL: Si hay rostros, deben mostrar un shock extremo, miedo o una sonrisa maliciosa. Si son objetos, deben verse prohibidos o legendarios. "
-                "4. GATILLO DE CURIOSIDAD: Crea un 'espacio vacío' mental. Algo debe estar roto, brillando o siendo señalado para que el espectador necesite la respuesta. "
-                "👁️ REQUISITOS TÉCNICOS DE ÉLITE: "
-                "Texto: Máximo 3 palabras. Fuente 'Ultra-Bold'. Legibilidad perfecta en móviles (20% del tamaño de pantalla). "
-                "Ejemplos de texto: 'ESTÁN MINTIENDO', 'EL FIN.', 'NADIE VIO ESTO'. "
-                "Iluminación: Estilo cinematográfico oscuro (Rim lighting) con sombras dramáticas que den profundidad 3D. "
-                f"📐 FORMATO: {'720 x 1280 px, Relación 9:16 (VERTICAL)' if is_short else '1280 x 720 px, Relación 16:9 (HORIZONTAL)'}, Calidad 4K fotorrealista. "
-                "🚀 OBJETIVO FINAL: El usuario debe sentir que si no hace clic, se está perdiendo el secreto más grande de su vida. "
-                "⚠️ PROHIBICIÓN: Cero diseños planos. Prohibido el estilo corporativo. Evitar elementos genéricos. Prioriza la tensión visual."
+                "Eres un experto en diseño de miniaturas virales de YouTube con alto CTR. "
+                f"Crea una miniatura impactante para un video titulado: '{title}'. "
+                f"Contexto del video: {description}. "
+                "\n\nESTRATEGIA VISUAL REQUERIDA:\n"
+                "1. COMPOSICIÓN: Sujeto principal muy grande y expresivo a un lado (regla de tercios). "
+                "2. COLORES: Usa colores vibrantes y contrastes agresivos (ej. Amarillo sobre Negro, Rojo sobre Cian). "
+                "3. CURIOSIDAD: Debe haber un elemento misterioso, una flecha señalando algo impactante o un objeto fuera de lugar que genere una pregunta inmediata. "
+                "4. EMOCIÓN: Si hay rostros, deben mostrar sorpresa extrema, shock o una emoción intensa. "
+                "5. TEXTO: Incluye un texto muy corto (máximo 2-3 palabras) en una fuente ultra-bold, muy grande y legible, con borde o sombra para resaltar. "
+                "Ejemplos de texto: '¡ES REAL!', 'EL SECRETO', 'NO LO CREERÁS'. "
+                "\n\nESPECIFICACIONES TÉCNICAS:\n"
+                f"- Formato: {'Vertical (9:16) para YouTube Shorts' if is_short else 'Horizontal (16:9) para YouTube'}.\n"
+                "- Estilo: Fotorrealista, 4K, cinematográfico, alta definición.\n"
+                "- Evita: Diseños planos, exceso de texto, elementos pequeños difíciles de ver en móviles."
             )
 
             headers = {
@@ -55,17 +52,19 @@ class ThumbnailGenerator:
                 "Authorization": f"Bearer {self.api_key}"
             }
 
+            # DALL-E 3 genera imágenes cuadradas por defecto (1024x1024).
+            # Luego las reencuadramos al formato deseado.
             payload = {
                 "model": "dall-e-3",
                 "prompt": prompt,
                 "n": 1,
-                "size": "1024x1024", # DALL-E 3 genera 1024x1024 por defecto, luego se puede reencuadrar o usar así
+                "size": "1024x1024",
                 "quality": "hd",
                 "style": "vivid"
             }
 
-            logger.info(f"Solicitando generación de miniatura a OpenAI para: {title}")
-            response = requests.post(self.url, headers=headers, json=payload, timeout=90)
+            logger.info(f"Solicitando generación de miniatura a OpenAI para: {title} ({'Short' if is_short else 'Largo'})")
+            response = requests.post(self.url, headers=headers, json=payload, timeout=120)
             
             if response.status_code == 200:
                 data = response.json()
@@ -74,17 +73,16 @@ class ThumbnailGenerator:
                 # Descargar la imagen generada
                 img_response = requests.get(image_url, timeout=30)
                 if img_response.status_code == 200:
-                    # Comprimir la imagen para asegurar que pese menos de 2MB (límite de YouTube)
                     try:
                         img = Image.open(io.BytesIO(img_response.content))
                         
-                        # Convertir a RGB si es necesario (DALL-E suele devolver PNG o WEBP que pueden ser RGBA)
+                        # Convertir a RGB si es necesario
                         if img.mode in ("RGBA", "P"):
                             img = img.convert("RGB")
 
                         # --- AJUSTE DE TAMAÑO EXACTO ---
                         if is_short:
-                            target_w, target_h = 720, 1280
+                            target_w, target_h = 1080, 1920
                         else:
                             target_w, target_h = 1280, 720
                             
@@ -100,28 +98,27 @@ class ThumbnailGenerator:
                             left = (new_w - target_w) / 2
                             img = img.crop((left, 0, left + target_w, target_h))
                         else:
-                            # La imagen es más alta que el objetivo (o igual): ajustar por ancho y recortar altura
+                            # La imagen es más alta que el objetivo: ajustar por ancho y recortar altura
                             new_w = target_w
                             new_h = int(new_w / img_ratio)
                             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
                             top = (new_h - target_h) / 2
                             img = img.crop((0, top, target_w, top + target_h))
                         
-                        # Guardar con compresión progresiva
+                        # Guardar con compresión progresiva para cumplir límite de 2MB de YouTube
                         quality = 85
                         img.save(output_path, "JPEG", quality=quality, optimize=True)
                         
-                        # Verificar tamaño y re-comprimir si es necesario
                         file_size = os.path.getsize(output_path)
                         while file_size > 2 * 1024 * 1024 and quality > 30:
                             quality -= 10
                             img.save(output_path, "JPEG", quality=quality, optimize=True)
                             file_size = os.path.getsize(output_path)
                             
-                        logger.info(f"Miniatura OpenAI generada y comprimida ({file_size/1024/1024:.2f}MB, calidad {quality}): {output_path}")
+                        logger.info(f"Miniatura OpenAI generada ({file_size/1024/1024:.2f}MB): {output_path}")
                         return output_path
                     except Exception as compress_err:
-                        logger.error(f"Error comprimiendo miniatura: {compress_err}. Guardando original...")
+                        logger.error(f"Error procesando miniatura: {compress_err}")
                         with open(output_path, "wb") as f:
                             f.write(img_response.content)
                         return output_path

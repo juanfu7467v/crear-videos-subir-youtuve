@@ -139,9 +139,21 @@ class VideoAutoPipeline:
                 self._stop_keep_alive()
                 return
 
-            # 4. Preparación de Miniatura (OpenAI desactivado para Shorts por petición)
-            thumbnail_path = None
+            # 4. Preparación de Miniatura con OpenAI
+            logger.info("4/6 Generando miniatura con OpenAI...")
+            thumbnail_path = str(output_dir / "thumbnail.jpg")
+            # Usar el generador directamente para tenerla lista antes de editar el video
+            thumbnail_path = self.quality_checker.thumbnail_generator.generate_thumbnail(
+                script_data=script_data,
+                output_path=thumbnail_path,
+                is_short=is_short
+            )
             
+            if thumbnail_path:
+                logger.info(f"✅ Miniatura generada: {thumbnail_path}")
+            else:
+                logger.warning("⚠️ No se pudo generar la miniatura con OpenAI, se usará fallback en QC.")
+
             # 5. Editar Video
             logger.info("5/6 Editando video final...")
             video_path = str(output_dir / "final_video.mp4")
@@ -158,7 +170,7 @@ class VideoAutoPipeline:
             logger.info("6/6 Realizando control de calidad...")
             qc_results = self.quality_checker.check_video(video_path, script_data=script_data)
             
-            # Si no se generó miniatura antes (videos largos), se genera ahora
+            # Si no se generó miniatura antes, se usa la de QC
             if not thumbnail_path:
                 thumbnail_path = qc_results.get('thumbnail_path')
             
