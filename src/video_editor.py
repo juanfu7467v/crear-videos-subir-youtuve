@@ -99,14 +99,23 @@ class VideoEditor:
             duration += 1.0
             start_offset = 1.0
 
-        # 3. Música de Fondo
+        # 3. Música de Fondo con Bucle (Audio Loop)
         final_audio = tts_audio.set_start(start_offset)
         try:
             music_files = list(Path(music_dir).glob("*.mp3"))
             if music_files:
-                bg_music = AudioFileClip(str(random.choice(music_files))).volumex(0.15).set_duration(duration)
+                music_path = str(random.choice(music_files))
+                bg_music = AudioFileClip(music_path).volumex(0.15)
+                
+                # Aplicar bucle si la música es más corta que el video
+                if bg_music.duration < duration:
+                    bg_music = bg_music.fx(afx.audio_loop, duration=duration)
+                else:
+                    bg_music = bg_music.set_duration(duration)
+                
                 final_audio = CompositeAudioClip([final_audio, bg_music])
-        except: pass
+        except Exception as e:
+            logger.warning(f"Error al añadir música de fondo: {e}")
 
         # 4. SUBTÍTULOS DINÁMICOS (Sincronización Palabra por Palabra)
         subtitles = []
