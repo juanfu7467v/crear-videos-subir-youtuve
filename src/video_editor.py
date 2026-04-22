@@ -33,6 +33,9 @@ class VideoEditor:
 
     def create_video(self, audio_path, media_list, script_data, format_type, output_path, music_dir="assets/music", thumbnail_path=None):
         # 1. Cargar Audio Principal
+        if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
+            raise Exception(f"Archivo de audio no encontrado o vacío: {audio_path}")
+            
         tts_audio = AudioFileClip(audio_path)
         duration = float(tts_audio.duration)
         is_short = "short" in str(format_type).lower()
@@ -45,7 +48,8 @@ class VideoEditor:
         current_time = 0.0
         for i, item in enumerate(media_list):
             path_str = str(item.get("path", ""))
-            if not path_str or not Path(path_str).exists(): continue
+            if not path_str or not Path(path_str).exists() or os.path.getsize(path_str) == 0: 
+                continue
             
             try:
                 clip_duration = float(item.get("segment_duration", 5.0))
@@ -77,14 +81,16 @@ class VideoEditor:
                 clips.append(clip)
                 current_time += clip_duration
                 if current_time >= duration: break
-            except: continue
+            except Exception as e:
+                logger.warning(f"Error procesando clip {path_str}: {e}")
+                continue
 
         visual_base = CompositeVideoClip(clips, size=(target_w, target_h)) if clips else None
         if not visual_base: raise Exception("No se pudieron cargar clips visuales")
 
         # Miniatura para Shorts
         start_offset = 0.0
-        if is_short and thumbnail_path and os.path.exists(thumbnail_path):
+        if is_short and thumbnail_path and os.path.exists(thumbnail_path) and os.path.getsize(thumbnail_path) > 0:
             thumb_clip = ImageClip(thumbnail_path).set_duration(1.0).set_start(0).resize(height=target_h)
             if thumb_clip.w < target_w: thumb_clip = thumb_clip.resize(width=target_w)
             thumb_clip = thumb_clip.crop(x_center=thumb_clip.w/2, y_center=thumb_clip.h/2, width=target_w, height=target_h)
@@ -111,26 +117,32 @@ class VideoEditor:
         y_pos = target_h * 0.5 if is_short else target_h * 0.8
         font_size = 120 if is_short else 80
 
-        if os.path.exists(ts_path):
-            with open(ts_path, "r", encoding="utf-8") as f:
-                word_timestamps = json.load(f)
-            
-            for word_data in word_timestamps:
-                word = word_data["word"].upper()
-                start = word_data["start"] + start_offset
-                dur = max(0.1, word_data["duration"])
+        # Validación de archivo de timestamps: existe y no está vacío
+        if os.path.exists(ts_path) and os.path.getsize(ts_path) > 0:
+            try:
+                with open(ts_path, "r", encoding="utf-8") as f:
+                    word_timestamps = json.load(f)
                 
-                # Colores vibrantes
-                color = random.choice(['yellow', 'white', '#00FF00', '#FF00FF'])
-                
-                txt_clip = TextClip(
-                    word, fontsize=font_size, color=color, font=font_path,
-                    stroke_color='black', stroke_width=4, size=(target_w*0.8, None), method='caption'
-                ).set_start(start).set_duration(dur).set_position(('center', y_pos))
-                
-                # Efecto Pop-In
-                txt_clip = txt_clip.fx(vfx.resize, lambda t: 1.0 + 0.2 * np.sin(t * 10) if t < 0.1 else 1.0)
-                subtitles.append(txt_clip)
+                for word_data in word_timestamps:
+                    word = word_data["word"].upper()
+                    start = word_data["start"] + start_offset
+                    dur = max(0.1, word_data["duration"])
+                    
+                    # Colores vibrantes
+                    color = random.choice(['yellow', 'white', '#00FF00', '#FF00FF'])
+                    
+                    txt_clip = TextClip(
+                        word, fontsize=font_size, color=color, font=font_path,
+                        stroke_color='black', stroke_width=4, size=(target_w*0.8, None), method='caption'
+                    ).set_start(start).set_duration(dur).set_position(('center', y_pos))
+                    
+                    # Efecto Pop-In
+                    txt_clip = txt_clip.fx(vfx.resize, lambda t: 1.0 + 0.2 * np.sin(t * 10) if t < 0.1 else 1.0)
+                    subtitles.append(txt_clip)
+            except Exception as e:
+                logger.error(f"Error decodificando JSON de timestamps: {e}")
+        else:
+            logger.warning(f"Archivo de timestamps no encontrado o vacío: {ts_path}. El video se generará sin subtítulos.")
         
         # 5. Composición Final
         final_video = CompositeVideoClip([visual_base] + subtitles, size=(target_w, target_h))

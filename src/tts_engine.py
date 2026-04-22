@@ -33,23 +33,32 @@ class TTSEngine:
         return self.default_voice
 
     async def _generate_with_timestamps(self, text: str, voice: str, output_path: str, rate: str, pitch: str):
-        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-        submaker = edge_tts.SubMaker()
+        # Crear una nueva instancia de Communicate para cada operación
+        communicate_audio = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
         
-        # Guardar audio
-        await communicate.save(output_path)
+        # Guardar audio primero
+        await communicate_audio.save(output_path)
         
-        # Generar timestamps
-        with open(output_path.replace(".mp3", ".json"), "w", encoding="utf-8") as f:
-            word_timestamps = []
-            async for chunk in communicate.stream():
-                if chunk["type"] == "WordBoundary":
-                    word_timestamps.append({
-                        "word": chunk["text"],
-                        "start": chunk["offset"] / 10**7, # Convertir a segundos
-                        "duration": chunk["duration"] / 10**7
-                    })
-            json.dump(word_timestamps, f, ensure_ascii=False, indent=2)
+        # Crear OTRA instancia nueva para el stream de timestamps para evitar "stream can only be called once"
+        communicate_stream = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+        word_timestamps = []
+        
+        async for chunk in communicate_stream.stream():
+            if chunk["type"] == "WordBoundary":
+                word_timestamps.append({
+                    "word": chunk["text"],
+                    "start": chunk["offset"] / 10**7, # Convertir a segundos
+                    "duration": chunk["duration"] / 10**7
+                })
+        
+        # Solo escribir el JSON si tenemos datos válidos
+        if word_timestamps:
+            json_path = output_path.replace(".mp3", ".json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(word_timestamps, f, ensure_ascii=False, indent=2)
+            logger.info(f"✅ Timestamps generados correctamente: {json_path}")
+        else:
+            logger.warning("⚠️ No se generaron timestamps para el audio.")
 
     def generate_audio(self, text: str, output_path: str, voice: str = None, rate: str = None, pitch: str = None) -> str:
         voice = self._get_valid_voice(voice or "random")
@@ -69,13 +78,18 @@ class TTSEngine:
         except Exception as e:
             logger.error(f"Error en Edge-TTS con timestamps: {e}")
             # Fallback simple si falla el sistema de timestamps
-            communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-            asyncio.run(communicate.save(output_path))
+            try:
+                communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+                asyncio.run(communicate.save(output_path))
+            except Exception as e2:
+                logger.error(f"Error crítico en fallback de TTS: {e2}")
             
         return output_path
 
     def get_audio_duration(self, audio_path: str) -> float:
         try:
+            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
+                return 5.0
             result = subprocess.run(
                 ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", audio_path],
                 capture_output=True, text=True
