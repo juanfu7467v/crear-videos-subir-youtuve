@@ -33,32 +33,63 @@ class TTSEngine:
         return self.default_voice
 
     async def _generate_with_timestamps(self, text: str, voice: str, output_path: str, rate: str, pitch: str):
-        # Crear una nueva instancia de Communicate para cada operación
-        communicate_audio = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+        # Crear una instancia de Communicate
+        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
         
-        # Guardar audio primero
-        await communicate_audio.save(output_path)
-        
-        # Crear OTRA instancia nueva para el stream de timestamps para evitar "stream can only be called once"
-        communicate_stream = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
         word_timestamps = []
+        sentence_boundaries = []
         
-        async for chunk in communicate_stream.stream():
-            if chunk["type"] == "WordBoundary":
-                word_timestamps.append({
-                    "word": chunk["text"],
-                    "start": chunk["offset"] / 10**7, # Convertir a segundos
-                    "duration": chunk["duration"] / 10**7
-                })
+        # Guardar audio y capturar eventos en un solo stream para eficiencia y consistencia
+        with open(output_path, "wb") as f:
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    f.write(chunk["data"])
+                elif chunk["type"] == "WordBoundary":
+                    word_timestamps.append({
+                        "word": chunk["text"],
+                        "start": chunk["offset"] / 10**7, # Convertir a segundos
+                        "duration": chunk["duration"] / 10**7
+                    })
+                elif chunk["type"] == "SentenceBoundary":
+                    sentence_boundaries.append({
+                        "text": chunk["text"],
+                        "start": chunk["offset"] / 10**7,
+                        "duration": chunk["duration"] / 10**7
+                    })
         
-        # Solo escribir el JSON si tenemos datos válidos
+        # Si no hay WordBoundaries (común en algunas versiones/voces de edge-tts),
+        # generarlos a partir de SentenceBoundaries
+        if not word_timestamps and sentence_boundaries:
+            logger.info("⚠️ WordBoundaries no disponibles, interpolando desde SentenceBoundaries...")
+            for sb in sentence_boundaries:
+                words = sb["text"].split()
+                if not words: continue
+                
+                # Estimar duración por palabra basada en longitud de caracteres
+                total_chars = sum(len(w) for w in words)
+                current_start = sb["start"]
+                
+                for word in words:
+                    # Proporción simple de duración por longitud de palabra
+                    word_dur = (len(word) / total_chars) * sb["duration"] if total_chars > 0 else sb["duration"] / len(words)
+                    word_timestamps.append({
+                        "word": word,
+                        "start": current_start,
+                        "duration": max(0.05, word_dur)
+                    })
+                    current_start += word_dur
+        
+        # Escribir el JSON siempre que tengamos datos (reales o estimados)
+        json_path = output_path.replace(".mp3", ".json")
         if word_timestamps:
-            json_path = output_path.replace(".mp3", ".json")
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(word_timestamps, f, ensure_ascii=False, indent=2)
-            logger.info(f"✅ Timestamps generados correctamente: {json_path}")
+            logger.info(f"✅ Timestamps generados correctamente ({len(word_timestamps)} palabras): {json_path}")
         else:
-            logger.warning("⚠️ No se generaron timestamps para el audio.")
+            # Crear un archivo JSON vacío o con estructura mínima para evitar errores de lectura posterior
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump([], f)
+            logger.warning(f"⚠️ No se pudieron generar timestamps para el audio. Archivo vacío creado: {json_path}")
 
     def generate_audio(self, text: str, output_path: str, voice: str = None, rate: str = None, pitch: str = None) -> str:
         voice = self._get_valid_voice(voice or "random")

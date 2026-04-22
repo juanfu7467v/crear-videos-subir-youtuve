@@ -8,11 +8,10 @@ ENV PYTHONUNBUFFERED=1 \
     TZ=America/Mexico_City \
     IMAGEMAGICK_BINARY=/usr/bin/convert
 
-# Instalar dependencias del sistema de forma limpia y controlada
-# Se asegura que FFmpeg y sus librerías se instalen desde el mismo repositorio para evitar mismatch
+# Instalar dependencias del sistema
+# Se eliminan librerías extras redundantes que pueden causar conflictos de versión con el binario de FFmpeg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libavcodec-extra \
     imagemagick \
     fonts-liberation \
     fontconfig \

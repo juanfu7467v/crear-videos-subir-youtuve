@@ -130,12 +130,19 @@ class VideoEditor:
         if os.path.exists(ts_path) and os.path.getsize(ts_path) > 0:
             try:
                 with open(ts_path, "r", encoding="utf-8") as f:
-                    word_timestamps = json.load(f)
+                    content = f.read().strip()
+                    if not content:
+                        raise ValueError("Archivo JSON vacío")
+                    word_timestamps = json.loads(content)
                 
+                if not isinstance(word_timestamps, list):
+                    raise ValueError("Formato de JSON inválido, se esperaba una lista")
+
                 for word_data in word_timestamps:
-                    word = word_data["word"].upper()
-                    start = word_data["start"] + start_offset
-                    dur = max(0.1, word_data["duration"])
+                    word = str(word_data.get("word", "")).upper()
+                    if not word: continue
+                    start = word_data.get("start", 0) + start_offset
+                    dur = max(0.1, word_data.get("duration", 0.5))
                     
                     # Colores vibrantes
                     color = random.choice(['yellow', 'white', '#00FF00', '#FF00FF'])
