@@ -5,168 +5,23 @@ import requests
 import re
 import logging
 from src.gemini_api_manager import gemini_api_manager
-from typing import Dict, Any, Optional, Set, List
+from typing import Dict, Any, Optional, List
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
 
 class ScriptGenerator:
     def __init__(self):
-        # Compatibilidad con nombres antiguos + nombre oficial actual
-        self.grok_api_key = (
-            os.getenv("XAI_API_KEY")
-            or os.getenv("GROK_TOKEN")
-            or os.getenv("GROK_API_KEY")
-        )
+        # Configuración de OpenAI para GPT-4o-mini
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.openai_client = None
+        if self.openai_api_key:
+            self.openai_client = OpenAI(api_key=self.openai_api_key)
+        
+        self.openai_timeout = int(os.getenv("OPENAI_TIMEOUT", "120"))
 
-        # Endpoint global oficial de xAI
-        self.xai_api_base = os.getenv("XAI_API_BASE_URL", "https://api.x.ai").rstrip("/")
-        self.xai_timeout = int(os.getenv("XAI_TIMEOUT", "120"))
-
-    def _get_xai_headers(self) -> Dict[str, str]:
-        return {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.grok_api_key}"
-        }
-
-    def _extract_available_models_from_language_models(self, payload: Dict[str, Any]) -> Set[str]:
-        available: Set[str] = set()
-
-        for model in payload.get("models", []) or []:
-            if not isinstance(model, dict):
-                continue
-
-            model_id = model.get("id")
-            if isinstance(model_id, str) and model_id.strip():
-                available.add(model_id.strip())
-
-            aliases = model.get("aliases", []) or []
-            for alias in aliases:
-                if isinstance(alias, str) and alias.strip():
-                    available.add(alias.strip())
-                elif isinstance(alias, dict):
-                    alias_id = alias.get("id")
-                    if isinstance(alias_id, str) and alias_id.strip():
-                        available.add(alias_id.strip())
-
-        return available
-
-    def _extract_available_models_from_models(self, payload: Dict[str, Any]) -> Set[str]:
-        available: Set[str] = set()
-
-        for model in payload.get("data", []) or []:
-            if not isinstance(model, dict):
-                continue
-
-            model_id = model.get("id")
-            if isinstance(model_id, str) and model_id.strip():
-                available.add(model_id.strip())
-
-        return available
-
-    def _get_available_xai_models(self) -> Set[str]:
-        """
-        Intenta descubrir los modelos realmente disponibles para la API key.
-        Primero usa /v1/language-models (más completo), y si falla, /v1/models.
-        """
-        if not self.grok_api_key:
-            return set()
-
-        headers = self._get_xai_headers()
-        available: Set[str] = set()
-
-        # Intento 1: endpoint completo con aliases
-        try:
-            url = f"{self.xai_api_base}/v1/language-models"
-            response = requests.get(url, headers=headers, timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                available |= self._extract_available_models_from_language_models(data)
-                if available:
-                    logger.info(f"Modelos xAI detectados desde /v1/language-models: {sorted(available)}")
-                    return available
-            else:
-                logger.warning(
-                    f"No se pudo obtener /v1/language-models (status {response.status_code}): {response.text}"
-                )
-        except Exception as e:
-            logger.warning(f"Error consultando /v1/language-models: {e}")
-
-        # Intento 2: endpoint básico
-        try:
-            url = f"{self.xai_api_base}/v1/models"
-            response = requests.get(url, headers=headers, timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                available |= self._extract_available_models_from_models(data)
-                if available:
-                    logger.info(f"Modelos xAI detectados desde /v1/models: {sorted(available)}")
-            else:
-                logger.warning(
-                    f"No se pudo obtener /v1/models (status {response.status_code}): {response.text}"
-                )
-        except Exception as e:
-            logger.warning(f"Error consultando /v1/models: {e}")
-
-        return available
-
-    def _preferred_xai_candidates(self) -> List[str]:
-        """
-        Modelos actuales y documentados oficialmente para texto/chat.
-        Ordenados por prioridad práctica para este caso de uso.
-        """
-        return [
-            "grok-4.20-reasoning",   # Flagship reasoning model
-            "grok-4.20",             # Alias for latest stable 4.20
-            "grok-4.20-non-reasoning", # Fast 4.20 variant
-            "grok-4",                # Stable alias for Grok 4 series
-            "grok-4-1-fast-reasoning",
-            "grok-4-1-fast",
-            "grok-3",
-            "grok-3-mini",
-        ]
-
-    def _get_xai_candidate_models(self) -> List[str]:
-        """
-        Devuelve la lista ordenada de modelos a probar:
-        1) prioriza candidatos actuales oficiales
-        2) filtra por los realmente disponibles en la API key si se pueden descubrir
-        3) si no se pueden descubrir, usa la lista preferida directamente
-        """
-        preferred = self._preferred_xai_candidates()
-        available = self._get_available_xai_models()
-
-        if not available:
-            logger.warning(
-                "No se pudieron descubrir modelos disponibles en xAI. "
-                "Se probará la lista de candidatos oficiales por orden."
-            )
-            return preferred
-
-        ordered = [m for m in preferred if m in available]
-
-        # Añadir otros modelos Grok disponibles por si la cuenta tiene variantes diferentes
-        extras = sorted(
-            m for m in available
-            if isinstance(m, str)
-            and m.startswith("grok-")
-            and m not in ordered
-            and "imagine" not in m
-            and "voice" not in m
-        )
-
-        candidates = ordered + extras
-
-        if not candidates:
-            logger.warning(
-                "La API key no devolvió ninguno de los candidatos preferidos; "
-                "se reintentará con la lista estática oficial."
-            )
-            return preferred
-
-        return candidates
-
-    def _parse_xai_json_content(self, content: str, voz: str) -> Dict[str, Any]:
+    def _parse_json_content(self, content: str, voz: str) -> Dict[str, Any]:
         raw = (content or "").strip()
 
         # Limpieza por si el modelo devuelve markdown fenced JSON
@@ -186,27 +41,20 @@ class ScriptGenerator:
 
         return result
 
-    def _call_llama_fallback(self, prompt: str, voz: str) -> Optional[Dict[str, Any]]:
+    def _call_openai_fallback(self, prompt: str, voz: str) -> Optional[Dict[str, Any]]:
         """
-        Fallback a xAI en caso de que Gemini falle.
-        Se mantiene /v1/chat/completions para no romper tu integración actual.
+        Fallback a GPT-4o-mini en caso de que Gemini falle.
         """
-        if not self.grok_api_key:
-            logger.warning("XAI_API_KEY/GROK_TOKEN/GROK_API_KEY no configurado. Fallback no disponible.")
+        if not self.openai_client:
+            logger.warning("OPENAI_API_KEY no configurado. Fallback no disponible.")
             return None
 
-        logger.info(f"Intentando generar guion con xAI (Fallback) usando endpoint global: {self.xai_api_base}")
+        logger.info("Intentando generar guion con GPT-4o-mini (Fallback)")
 
-        url = f"{self.xai_api_base}/v1/chat/completions"
-        headers = self._get_xai_headers()
-        fallback_models = self._get_xai_candidate_models()
-
-        logger.info(f"Orden de modelos fallback xAI: {fallback_models}")
-
-        for model in fallback_models:
-            payload = {
-                "model": model,
-                "messages": [
+        try:
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
                     {
                         "role": "system",
                         "content": (
@@ -216,79 +64,27 @@ class ScriptGenerator:
                     },
                     {"role": "user", "content": prompt}
                 ],
-                "temperature": 0.7,
-                "response_format": {"type": "json_object"}
-            }
+                temperature=0.7,
+                response_format={"type": "json_object"},
+                timeout=self.openai_timeout
+            )
 
-            try:
-                response = requests.post(url, headers=headers, json=payload, timeout=self.xai_timeout)
+            content = response.choices[0].message.content
+            if content:
+                result = self._parse_json_content(content, voz)
+                logger.info("✅ Guion generado exitosamente con GPT-4o-mini")
+                return result
+            
+            logger.warning("GPT-4o-mini respondió sin contenido utilizable.")
 
-                if response.status_code == 200:
-                    data = response.json()
-                    choices = data.get("choices", [])
-
-                    if choices and choices[0].get("message", {}).get("content"):
-                        content = choices[0]["message"]["content"]
-                        result = self._parse_xai_json_content(content, voz)
-                        logger.info(f"✅ Guion generado exitosamente con el modelo de fallback xAI: {model}")
-                        return result
-
-                    logger.warning(f"El modelo {model} respondió 200 pero sin contenido utilizable.")
-                    continue
-
-                # Reintento sin response_format si el modelo/endp. lo rechaza
-                if response.status_code in (400, 422) and "response_format" in response.text.lower():
-                    logger.warning(
-                        f"El modelo {model} rechazó response_format. Reintentando sin response_format..."
-                    )
-
-                    payload_no_format = {
-                        "model": model,
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": (
-                                    "Eres un experto en guiones de YouTube. "
-                                    "Responde exclusivamente con un objeto JSON válido, sin texto adicional."
-                                )
-                            },
-                            {"role": "user", "content": prompt}
-                        ],
-                        "temperature": 0.7
-                    }
-
-                    retry_response = requests.post(
-                        url,
-                        headers=headers,
-                        json=payload_no_format,
-                        timeout=self.xai_timeout
-                    )
-
-                    if retry_response.status_code == 200:
-                        data = retry_response.json()
-                        choices = data.get("choices", [])
-
-                        if choices and choices[0].get("message", {}).get("content"):
-                            content = choices[0]["message"]["content"]
-                            result = self._parse_xai_json_content(content, voz)
-                            logger.info(
-                                f"✅ Guion generado exitosamente con el modelo xAI (sin response_format): {model}"
-                            )
-                            return result
-
-                logger.warning(
-                    f"Fallo con el modelo {model} "
-                    f"(Status: {response.status_code}). Respuesta: {response.text}"
-                )
-
-            except Exception as e:
-                logger.error(f"Error intentando fallback con modelo xAI {model}: {e}")
+        except Exception as e:
+            logger.error(f"Error intentando fallback con GPT-4o-mini: {e}")
 
         return None
 
     def generate_full_script(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Genera un guion optimizado para YouTube utilizando la API de Gemini con fallback a xAI.
+        Genera un guion optimizado para YouTube utilizando la API de Gemini con fallback a GPT-4o-mini.
         """
         topic = input_data.get("tema_recomendado", "Sin tema")
         canal = input_data.get("canal", "CHANNEL_NAME")
@@ -356,7 +152,7 @@ class ScriptGenerator:
             "La suma de 'estimated_duration' debe coincidir con la duración total esperada."
         )
 
-        max_retries = 5
+        max_retries = 3
         retry_delay = 5
 
         for attempt in range(max_retries):
@@ -378,13 +174,14 @@ class ScriptGenerator:
                     if "candidates" in data and len(data["candidates"]) > 0:
                         text_response = data["candidates"][0]["content"]["parts"][0]["text"]
                         return json.loads(text_response)
-
+                
+                logger.warning(f"Gemini falló (Status {response.status_code}). Rotando clave...")
                 gemini_api_manager.rotate_key()
                 time.sleep(retry_delay)
 
             except Exception as e:
-                logger.error(f"Error en intento {attempt + 1}: {e}")
+                logger.error(f"Error en intento {attempt + 1} con Gemini: {e}")
                 time.sleep(retry_delay)
 
-        # Fallback a xAI
-        return self._call_llama_fallback(prompt, voz)
+        # Fallback a GPT-4o-mini
+        return self._call_openai_fallback(prompt, voz)
