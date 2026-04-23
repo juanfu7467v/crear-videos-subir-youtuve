@@ -33,9 +33,29 @@ class TTSEngine:
         return self.default_voice
 
     async def _generate_with_timestamps(self, text: str, voice: str, output_path: str, rate: str, pitch: str):
-        # Crear una instancia de Communicate
+        # MEJORA: Construir SSML para mejorar entonación y dinamismo
+        # Ajustamos el prosody para que sea más expresivo
+        ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='es-MX'>
+            <voice name='{voice}'>
+                <prosody rate='{rate}' pitch='{pitch}'>
+                    {text}
+                </prosody>
+            </voice>
+        </speak>"""
+        
+        # Crear una instancia de Communicate con SSML
         communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
         
+        # Intentar usar SSML si es posible para mayor expresividad
+        # Nota: edge-tts Communicate acepta texto o SSML. 
+        # Si usamos SSML, el método stream() sigue funcionando para WordBoundaries.
+        try:
+            communicate = edge_tts.Communicate(ssml, voice)
+            logger.info("Utilizando SSML para mejorar entonación y ritmo.")
+        except Exception as e:
+            logger.warning(f"Fallo al inicializar SSML, usando texto plano: {e}")
+            communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+
         word_timestamps = []
         sentence_boundaries = []
         
@@ -129,6 +149,30 @@ class TTSEngine:
         except:
             return 5.0
 
+    def _apply_pronunciation_dictionary(self, text: str) -> str:
+        """
+        Diccionario de corrección fonética para nombres propios y términos en inglés.
+        """
+        corrections = {
+            r"\bStallone\b": "Estalón",
+            r"\bDavid Morrell\b": "Deivid Morrel",
+            r"\bFirst Blood\b": "Ferst Blad",
+            r"\bGoldsmith\b": "Goldsmit",
+            r"\bRambo\b": "Rambo",
+            r"\bSylvester\b": "Silvéster",
+            # Términos comunes de IA que deben eliminarse si se filtran
+            r"\[Introducción cinematográfica\]": "",
+            r"\[Capítulo \d+\]": "",
+            r"\[Conclusión\]": "",
+            r"\[Música.*?\]": "",
+            r"\(Voz en off\)": "",
+            r"\(Escena.*?\)": "",
+        }
+        
+        for pattern, replacement in corrections.items():
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        return text
+
     def _clean_text(self, text: str) -> str:
         if text.startswith('{') and '}' in text:
             try:
@@ -136,6 +180,10 @@ class TTSEngine:
                 if isinstance(data, dict):
                     text = data.get('full_script', text)
             except: pass
+        
+        # Eliminar etiquetas de estructura que la IA a veces incluye
+        text = re.sub(r'^(Introducción|Capítulo \d+|Conclusión|Escena \d+):', '', text, flags=re.IGNORECASE | re.MULTILINE)
+        
         text = re.sub(r'\*\*|__', '', text)
         text = re.sub(r'#+\s+', '', text)
         text = text.replace('"', '').replace("'", "").replace('\\n', ' ').replace('\\', '')
@@ -144,5 +192,9 @@ class TTSEngine:
         text = re.sub(r'[{|\[\]<>/@#$%^&*+=~]', ' ', text)
         text = text.replace('...', '.')
         text = re.sub(r'\s+([,.?!])', r'\1', text)
+        
+        # Aplicar diccionario de pronunciación
+        text = self._apply_pronunciation_dictionary(text)
+        
         text = re.sub(r'\s+', ' ', text)
         return text.strip()

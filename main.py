@@ -62,6 +62,14 @@ class VideoAutoPipeline:
             logger.info(f"Formato: {format_suggested} | Canal: {canal}")
             self._start_keep_alive()
 
+            # MEJORA: Reemplazo correcto del nombre del canal desde secrets si es necesario
+            if canal == "CHANNEL_NAME_2":
+                canal = os.getenv("CHANNEL_NAME_2_REAL_NAME", "PeliPREX-Shorts")
+                logger.info(f"Reemplazando CHANNEL_NAME_2 por nombre real: {canal}")
+            elif canal == "CHANNEL_NAME":
+                canal = os.getenv("CHANNEL_NAME_REAL_NAME", "PeliPREX")
+                logger.info(f"Reemplazando CHANNEL_NAME por nombre real: {canal}")
+
             # 1. Generar Guion extendido usando la idea de contenido
             logger.info("1/6 Generando guion y metadatos...")
             input_data = {

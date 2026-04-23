@@ -92,14 +92,14 @@ class MediaFetcher:
 
         # Calculamos cuántos ciclos de 7-10-7 caben, pero pediremos suficientes clips para cubrir la duración
         # Si cada ciclo es ~17s, necesitamos target_duration / 17 ciclos.
-        # Cada ciclo usa 1 clip de Peliprex y 1 de Stock.
-        clips_needed_each = (target_duration // 17) + 2
+        # MEJORA: Duplicamos la cantidad de clips solicitados para asegurar cobertura total y variedad
+        clips_needed_each = ((target_duration // 17) + 2) * 2
         
-        logger.info(f"Intentando obtener clips de Peliprex para: {movie_title}")
+        logger.info(f"Intentando obtener clips de Peliprex para: {movie_title} (Cantidad duplicada: {clips_needed_each})")
         peliprex_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, clips_needed_each)
         
         # 3. Intentar obtener clips de Archive.org (Prioridad 2 - Stock Principal)
-        logger.info(f"Prioridad 2: Buscando en Archive.org para: {movie_title}")
+        logger.info(f"Prioridad 2: Buscando en Archive.org para: {movie_title} (Cantidad duplicada: {clips_needed_each})")
         archive_clips = self.archive_smart_downloader.fetch_smart_clips(movie_title, save_dir, clips_needed_each)
         
         # Si Archive Smart falla, intentar Archive Legacy
