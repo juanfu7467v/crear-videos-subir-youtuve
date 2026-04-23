@@ -209,6 +209,11 @@ class VideoAutoPipeline:
             logger.info(f"📅 Programado para: {publish_time}")
 
             # --- POLÍTICA DE RESIDUO CERO ---
+            # Esperar un momento para asegurar que los procesos de subida de YouTube 
+            # (que a veces tienen hilos internos o latencia en el API) hayan cerrado los archivos.
+            logger.info("⏳ Esperando 10s antes de la limpieza para asegurar integridad de subida...")
+            time.sleep(10)
+            
             logger.info("🧹 Aplicando Política de Residuo Cero...")
             self._cleanup_assets(output_dir, temp_assets_dir)
             self._stop_keep_alive()

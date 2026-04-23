@@ -14,9 +14,11 @@ if not hasattr(Image, 'ANTIALIAS'):
     except Exception:
         pass
 
+import subprocess
+from src.ass_generator import ASSGenerator
 from moviepy.editor import (
     VideoFileClip, ImageClip, AudioFileClip, concatenate_videoclips, 
-    CompositeVideoClip, TextClip, afx, vfx
+    CompositeVideoClip, afx, vfx
 )
 from moviepy.audio.AudioClip import AudioArrayClip, concatenate_audioclips, CompositeAudioClip
 
@@ -117,56 +119,53 @@ class VideoEditor:
         except Exception as e:
             logger.warning(f"Error al añadir música de fondo: {e}")
 
-        # 4. SUBTÍTULOS DINÁMICOS (Sincronización Palabra por Palabra)
-        subtitles = []
-        ts_path = audio_path.replace(".mp3", ".json")
-        font_path = "assets/fonts/bold.ttf"
-        if not os.path.exists(font_path): font_path = 'Liberation-Sans-Bold'
+        # 4. Composición Base (Sin subtítulos de MoviePy)
+        final_video = visual_base.set_audio(final_audio).set_duration(duration)
         
-        y_pos = target_h * 0.5 if is_short else target_h * 0.8
-        font_size = 120 if is_short else 80
-
-        # Validación de archivo de timestamps: existe y no está vacío
+        # Guardar video temporal sin subtítulos
+        temp_no_subs = output_path.replace(".mp4", "_no_subs.mp4")
+        final_video.write_videofile(temp_no_subs, fps=24, codec="libx264", audio_codec="aac", threads=4, preset="ultrafast", logger=None)
+        
+        # 5. SUBTÍTULOS AVANZADOS CON FFmpeg (Estilo ASS/Karaoke)
+        ts_path = audio_path.replace(".mp3", ".json")
+        ass_path = output_path.replace(".mp4", ".ass")
+        
         if os.path.exists(ts_path) and os.path.getsize(ts_path) > 0:
             try:
                 with open(ts_path, "r", encoding="utf-8") as f:
-                    content = f.read().strip()
-                    if not content:
-                        raise ValueError("Archivo JSON vacío")
-                    word_timestamps = json.loads(content)
+                    word_timestamps = json.load(f)
                 
-                if not isinstance(word_timestamps, list):
-                    raise ValueError("Formato de JSON inválido, se esperaba una lista")
-
-                for word_data in word_timestamps:
-                    word = str(word_data.get("word", "")).upper()
-                    if not word: continue
-                    start = word_data.get("start", 0) + start_offset
-                    dur = max(0.1, word_data.get("duration", 0.5))
-                    
-                    # Colores vibrantes
-                    color = random.choice(['yellow', 'white', '#00FF00', '#FF00FF'])
-                    
-                    txt_clip = TextClip(
-                        word, fontsize=font_size, color=color, font=font_path,
-                        stroke_color='black', stroke_width=4, size=(target_w*0.8, None), method='caption'
-                    ).set_start(start).set_duration(dur).set_position(('center', y_pos))
-                    
-                    # Efecto Pop-In
-                    txt_clip = txt_clip.fx(vfx.resize, lambda t: 1.0 + 0.2 * np.sin(t * 10) if t < 0.1 else 1.0)
-                    subtitles.append(txt_clip)
+                # Generar archivo ASS
+                ass_gen = ASSGenerator()
+                ass_gen.generate_ass(word_timestamps, ass_path, start_offset=start_offset)
+                
+                # "Quemar" subtítulos usando FFmpeg directamente
+                logger.info("Quemando subtítulos ASS con FFmpeg...")
+                # Escapar la ruta para el filtro ass de ffmpeg
+                # En FFmpeg, los dos puntos en la ruta del archivo deben escaparse
+                escaped_ass_path = ass_path.replace(":", "\\:")
+                
+                cmd = [
+                    "ffmpeg", "-y", "-i", temp_no_subs,
+                    "-vf", f"ass={escaped_ass_path}",
+                    "-c:a", "copy", "-preset", "ultrafast", output_path
+                ]
+                # Usamos shell=True si hay problemas con argumentos complejos, 
+                # pero con lista de argumentos suele ser más seguro.
+                subprocess.run(cmd, check=True, capture_output=True)
+                logger.info(f"✅ Video final con subtítulos generado: {output_path}")
+                
+                # Limpiar archivo temporal
+                if os.path.exists(temp_no_subs): os.remove(temp_no_subs)
             except Exception as e:
-                logger.error(f"Error decodificando JSON de timestamps: {e}")
+                logger.error(f"Error quemando subtítulos ASS: {e}")
+                # Si falla FFmpeg, usamos el video sin subtítulos como final
+                if os.path.exists(temp_no_subs): os.rename(temp_no_subs, output_path)
         else:
-            logger.warning(f"Archivo de timestamps no encontrado o vacío: {ts_path}. El video se generará sin subtítulos.")
-        
-        # 5. Composición Final
-        final_video = CompositeVideoClip([visual_base] + subtitles, size=(target_w, target_h))
-        final_video = final_video.set_audio(final_audio).set_duration(duration)
-        
-        final_video.write_videofile(output_path, fps=24, codec="libx264", audio_codec="aac", threads=4, preset="ultrafast", logger=None)
-        
-        # Limpieza
+            logger.warning("No se encontraron timestamps, generando video sin subtítulos.")
+            if os.path.exists(temp_no_subs): os.rename(temp_no_subs, output_path)
+
+        # Limpieza final de clips
         tts_audio.close()
         final_video.close()
         cleanup_ffmpeg()
