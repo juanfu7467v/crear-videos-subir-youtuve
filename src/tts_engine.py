@@ -37,7 +37,6 @@ class TTSEngine:
         clean_text = self._clean_text(text)
         
         # Construir SSML para mejorar entonación y dinamismo
-        # Usamos el texto ya limpio dentro de las etiquetas SSML
         ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='es-MX'>
             <voice name='{voice}'>
                 <prosody rate='{rate}' pitch='{pitch}'>
@@ -46,10 +45,7 @@ class TTSEngine:
             </voice>
         </speak>"""
         
-        # Intentar usar SSML si es posible para mayor expresividad
         try:
-            # IMPORTANTE: Para edge_tts.Communicate, si se pasa SSML, NO se deben pasar rate/pitch por separado
-            # ya que estos deben ir dentro del SSML en la etiqueta <prosody>
             communicate = edge_tts.Communicate(ssml, voice)
             logger.info("Utilizando SSML para mejorar entonación y ritmo.")
         except Exception as e:
@@ -59,7 +55,6 @@ class TTSEngine:
         word_timestamps = []
         sentence_boundaries = []
         
-        # Guardar audio y capturar eventos en un solo stream
         with open(output_path, "wb") as f:
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
@@ -67,7 +62,7 @@ class TTSEngine:
                 elif chunk["type"] == "WordBoundary":
                     word_timestamps.append({
                         "word": chunk["text"],
-                        "start": chunk["offset"] / 10**7, # Convertir a segundos
+                        "start": chunk["offset"] / 10**7, 
                         "duration": chunk["duration"] / 10**7
                     })
                 elif chunk["type"] == "SentenceBoundary":
@@ -77,7 +72,6 @@ class TTSEngine:
                         "duration": chunk["duration"] / 10**7
                     })
         
-        # Si no hay WordBoundaries, interpolar desde SentenceBoundaries
         if not word_timestamps and sentence_boundaries:
             logger.info("⚠️ WordBoundaries no disponibles, interpolando desde SentenceBoundaries...")
             for sb in sentence_boundaries:
@@ -96,7 +90,6 @@ class TTSEngine:
                     })
                     current_start += word_dur
         
-        # Escribir el JSON de timestamps
         json_path = output_path.replace(".mp3", ".json")
         if word_timestamps:
             with open(json_path, "w", encoding="utf-8") as f:
@@ -113,8 +106,6 @@ class TTSEngine:
         pitch = pitch or self.default_pitch
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        
-        # El texto se limpia dentro de _generate_with_timestamps o antes de llamar a edge_tts
         text = text[:8000]
         
         logger.info(f"Generando TTS con timestamps para voz: {voice}")
@@ -125,7 +116,6 @@ class TTSEngine:
                 return output_path
         except Exception as e:
             logger.error(f"Error en Edge-TTS con timestamps: {e}")
-            # Fallback simple si falla el sistema de timestamps
             try:
                 clean_text = self._clean_text(text)
                 communicate = edge_tts.Communicate(clean_text, voice, rate=rate, pitch=pitch)
@@ -148,9 +138,6 @@ class TTSEngine:
             return 5.0
 
     def _apply_pronunciation_dictionary(self, text: str) -> str:
-        """
-        Diccionario de corrección fonética para nombres propios y términos en inglés.
-        """
         corrections = {
             r"\bStallone\b": "Estalón",
             r"\bDavid Morrell\b": "Deivid Morrel",
@@ -158,7 +145,6 @@ class TTSEngine:
             r"\bGoldsmith\b": "Goldsmit",
             r"\bRambo\b": "Rambo",
             r"\bSylvester\b": "Silvéster",
-            # Términos comunes de IA que deben eliminarse si se filtran
             r"\[Introducción cinematográfica\]": "",
             r"\[Capítulo \d+\]": "",
             r"\[Conclusión\]": "",
@@ -172,7 +158,7 @@ class TTSEngine:
         return text
 
     def _clean_text(self, text: str) -> str:
-        # Si el texto es un JSON (a veces pasa si la IA devuelve el objeto completo)
+        # 1. Si el texto es un JSON (a veces pasa si la IA devuelve el objeto completo)
         if text.strip().startswith('{') and '}' in text:
             try:
                 data = json.loads(text)
@@ -180,19 +166,34 @@ class TTSEngine:
                     text = data.get('full_script', text)
             except: pass
         
-        # Eliminar etiquetas SSML que ya pudieran venir en el texto para evitar duplicidad o lectura literal
+        # 2. ELIMINAR ETIQUETAS TÉCNICAS Y METADATOS (Regex Reforzado)
+        # Eliminar bloques XML/SSML completos que puedan venir en el texto
+        text = re.sub(r'<[^>]*>.*?</[^>]*>', '', text, flags=re.DOTALL)
+        # Eliminar etiquetas sueltas
         text = re.sub(r'<[^>]*>', '', text)
         
-        # Eliminar etiquetas de estructura que la IA a veces incluye
-        text = re.sub(r'^(Introducción|Capítulo \d+|Conclusión|Escena \d+):', '', text, flags=re.IGNORECASE | re.MULTILINE)
+        # Eliminar etiquetas de estructura de guion comunes
+        script_tags = [
+            r'^Guion:.*$', r'^Script:.*$', r'^TTS:.*$', r'^\[TTS\].*$',
+            r'^Narrador:.*$', r'^Voz en off:.*$', r'^Escena \d+:.*$',
+            r'^Introducción:.*$', r'^Capítulo \d+:.*$', r'^Conclusión:.*$'
+        ]
+        for tag in script_tags:
+            text = re.sub(tag, '', text, flags=re.IGNORECASE | re.MULTILINE)
+
+        # Eliminar palabras técnicas sueltas que la IA a veces incluye
+        technical_terms = [r'\bXML\b', r'\bSSML\b', r'\bGuion\b', r'\bMetadatos\b']
+        for term in technical_terms:
+            text = re.sub(term, '', text, flags=re.IGNORECASE)
         
+        # 3. Limpieza de formato Markdown y caracteres especiales
         text = re.sub(r'\*\*|__', '', text)
         text = re.sub(r'#+\s+', '', text)
         text = text.replace('"', '').replace("'", "").replace('\\n', ' ').replace('\\', '')
         text = text.replace('_', ' ')
         text = re.sub(r'[-—–]', ' ', text)
         
-        # Caracteres especiales que pueden romper el XML/SSML o ser leídos raro
+        # Caracteres que rompen el XML o suenan mal
         text = text.replace('&', ' y ')
         text = text.replace('<', ' ').replace('>', ' ')
         
@@ -200,8 +201,9 @@ class TTSEngine:
         text = text.replace('...', '.')
         text = re.sub(r'\s+([,.?!])', r'\1', text)
         
-        # Aplicar diccionario de pronunciación
+        # 4. Aplicar diccionario de pronunciación
         text = self._apply_pronunciation_dictionary(text)
         
+        # 5. Normalizar espacios
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
