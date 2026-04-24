@@ -33,33 +33,33 @@ class TTSEngine:
         return self.default_voice
 
     async def _generate_with_timestamps(self, text: str, voice: str, output_path: str, rate: str, pitch: str):
-        # MEJORA: Construir SSML para mejorar entonación y dinamismo
-        # Ajustamos el prosody para que sea más expresivo
+        # Aseguramos que el texto esté limpio para evitar que se lean etiquetas SSML
+        clean_text = self._clean_text(text)
+        
+        # Construir SSML para mejorar entonación y dinamismo
+        # Usamos el texto ya limpio dentro de las etiquetas SSML
         ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='es-MX'>
             <voice name='{voice}'>
                 <prosody rate='{rate}' pitch='{pitch}'>
-                    {text}
+                    {clean_text}
                 </prosody>
             </voice>
         </speak>"""
         
-        # Crear una instancia de Communicate con SSML
-        communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-        
         # Intentar usar SSML si es posible para mayor expresividad
-        # Nota: edge-tts Communicate acepta texto o SSML. 
-        # Si usamos SSML, el método stream() sigue funcionando para WordBoundaries.
         try:
+            # IMPORTANTE: Para edge_tts.Communicate, si se pasa SSML, NO se deben pasar rate/pitch por separado
+            # ya que estos deben ir dentro del SSML en la etiqueta <prosody>
             communicate = edge_tts.Communicate(ssml, voice)
             logger.info("Utilizando SSML para mejorar entonación y ritmo.")
         except Exception as e:
             logger.warning(f"Fallo al inicializar SSML, usando texto plano: {e}")
-            communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+            communicate = edge_tts.Communicate(clean_text, voice, rate=rate, pitch=pitch)
 
         word_timestamps = []
         sentence_boundaries = []
         
-        # Guardar audio y capturar eventos en un solo stream para eficiencia y consistencia
+        # Guardar audio y capturar eventos en un solo stream
         with open(output_path, "wb") as f:
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
@@ -77,20 +77,17 @@ class TTSEngine:
                         "duration": chunk["duration"] / 10**7
                     })
         
-        # Si no hay WordBoundaries (común en algunas versiones/voces de edge-tts),
-        # generarlos a partir de SentenceBoundaries
+        # Si no hay WordBoundaries, interpolar desde SentenceBoundaries
         if not word_timestamps and sentence_boundaries:
             logger.info("⚠️ WordBoundaries no disponibles, interpolando desde SentenceBoundaries...")
             for sb in sentence_boundaries:
                 words = sb["text"].split()
                 if not words: continue
                 
-                # Estimar duración por palabra basada en longitud de caracteres
                 total_chars = sum(len(w) for w in words)
                 current_start = sb["start"]
                 
                 for word in words:
-                    # Proporción simple de duración por longitud de palabra
                     word_dur = (len(word) / total_chars) * sb["duration"] if total_chars > 0 else sb["duration"] / len(words)
                     word_timestamps.append({
                         "word": word,
@@ -99,14 +96,13 @@ class TTSEngine:
                     })
                     current_start += word_dur
         
-        # Escribir el JSON siempre que tengamos datos (reales o estimados)
+        # Escribir el JSON de timestamps
         json_path = output_path.replace(".mp3", ".json")
         if word_timestamps:
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(word_timestamps, f, ensure_ascii=False, indent=2)
             logger.info(f"✅ Timestamps generados correctamente ({len(word_timestamps)} palabras): {json_path}")
         else:
-            # Crear un archivo JSON vacío o con estructura mínima para evitar errores de lectura posterior
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump([], f)
             logger.warning(f"⚠️ No se pudieron generar timestamps para el audio. Archivo vacío creado: {json_path}")
@@ -117,7 +113,8 @@ class TTSEngine:
         pitch = pitch or self.default_pitch
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        text = self._clean_text(text)
+        
+        # El texto se limpia dentro de _generate_with_timestamps o antes de llamar a edge_tts
         text = text[:8000]
         
         logger.info(f"Generando TTS con timestamps para voz: {voice}")
@@ -130,7 +127,8 @@ class TTSEngine:
             logger.error(f"Error en Edge-TTS con timestamps: {e}")
             # Fallback simple si falla el sistema de timestamps
             try:
-                communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+                clean_text = self._clean_text(text)
+                communicate = edge_tts.Communicate(clean_text, voice, rate=rate, pitch=pitch)
                 asyncio.run(communicate.save(output_path))
             except Exception as e2:
                 logger.error(f"Error crítico en fallback de TTS: {e2}")
@@ -174,12 +172,16 @@ class TTSEngine:
         return text
 
     def _clean_text(self, text: str) -> str:
-        if text.startswith('{') and '}' in text:
+        # Si el texto es un JSON (a veces pasa si la IA devuelve el objeto completo)
+        if text.strip().startswith('{') and '}' in text:
             try:
                 data = json.loads(text)
                 if isinstance(data, dict):
                     text = data.get('full_script', text)
             except: pass
+        
+        # Eliminar etiquetas SSML que ya pudieran venir en el texto para evitar duplicidad o lectura literal
+        text = re.sub(r'<[^>]*>', '', text)
         
         # Eliminar etiquetas de estructura que la IA a veces incluye
         text = re.sub(r'^(Introducción|Capítulo \d+|Conclusión|Escena \d+):', '', text, flags=re.IGNORECASE | re.MULTILINE)
@@ -189,7 +191,12 @@ class TTSEngine:
         text = text.replace('"', '').replace("'", "").replace('\\n', ' ').replace('\\', '')
         text = text.replace('_', ' ')
         text = re.sub(r'[-—–]', ' ', text)
-        text = re.sub(r'[{|\[\]<>/@#$%^&*+=~]', ' ', text)
+        
+        # Caracteres especiales que pueden romper el XML/SSML o ser leídos raro
+        text = text.replace('&', ' y ')
+        text = text.replace('<', ' ').replace('>', ' ')
+        
+        text = re.sub(r'[{|\[\]/@#$%^&*+=~]', ' ', text)
         text = text.replace('...', '.')
         text = re.sub(r'\s+([,.?!])', r'\1', text)
         

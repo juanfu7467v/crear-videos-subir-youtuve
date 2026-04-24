@@ -16,7 +16,7 @@ from src.script_generator import ScriptGenerator
 from src.tts_engine import TTSEngine
 from src.media_fetcher import MediaFetcher
 from src.video_editor import VideoEditor
-from src.quality_checker import QualityChecker
+from src.thumbnail_generator import ThumbnailGenerator
 from src.youtube_uploader import YouTubeUploader
 from src.scheduler import VideoScheduler
 
@@ -36,7 +36,8 @@ class VideoAutoPipeline:
             os.getenv("YOUTUBE_API_KEY", "")
         )
         self.video_editor    = VideoEditor()
-        self.quality_checker = QualityChecker()
+        # MEJORA: Eliminado QualityChecker, usamos ThumbnailGenerator directamente
+        self.thumbnail_gen   = ThumbnailGenerator(os.getenv("OPENAI_API_KEY"))
         self.yt_uploader     = YouTubeUploader()
         self.scheduler       = VideoScheduler()
         self.keep_alive_thread = None
@@ -99,6 +100,7 @@ class VideoAutoPipeline:
             video_description = script_data.get('description', '')
 
             # Generar enlace de Peliprex si es categoría películas y hay término de búsqueda
+            peliprex_movie_name = None
             if "películas" in categoria.lower() and script_data.get('peliprex_search_term'):
                 peliprex_movie_name = script_data.get('peliprex_search_term')
                 peliprex_link = self.media_fetcher.peliprex_downloader.generate_peliprex_link(peliprex_movie_name)
@@ -146,20 +148,30 @@ class VideoAutoPipeline:
                 self._stop_keep_alive()
                 return
 
-            # 4. Preparación de Miniatura con OpenAI
-            logger.info("4/6 Generando miniatura con OpenAI...")
+            # 4. Preparación de Miniatura
+            logger.info("4/6 Generando miniatura...")
             thumbnail_path = str(output_dir / "thumbnail.jpg")
-            # Usar el generador directamente para tenerla lista antes de editar el video
-            thumbnail_path = self.quality_checker.thumbnail_generator.generate_thumbnail(
-                script_data=script_data,
-                output_path=thumbnail_path,
-                is_short=is_short
-            )
             
-            if thumbnail_path:
-                logger.info(f"✅ Miniatura generada: {thumbnail_path}")
-            else:
-                logger.warning("⚠️ No se pudo generar la miniatura con OpenAI, se usará fallback en QC.")
+            # PRIORIDAD 1: Miniatura de TMDB si es categoría películas
+            tmdb_thumb_success = False
+            if "películas" in categoria.lower():
+                thumbnail_search_term = peliprex_movie_name if peliprex_movie_name else topic
+                if self.media_fetcher.generate_thumbnail(thumbnail_search_term, video_title, thumbnail_path, categoria=categoria):
+                    logger.info(f"✅ Miniatura de TMDB generada: {thumbnail_path}")
+                    tmdb_thumb_success = True
+
+            # PRIORIDAD 2: Miniatura con OpenAI si no es películas o si falló TMDB
+            if not tmdb_thumb_success:
+                logger.info("Generando miniatura con OpenAI...")
+                thumbnail_path = self.thumbnail_gen.generate_thumbnail(
+                    script_data=script_data,
+                    output_path=thumbnail_path,
+                    is_short=is_short
+                )
+                if thumbnail_path:
+                    logger.info(f"✅ Miniatura con OpenAI generada: {thumbnail_path}")
+                else:
+                    logger.warning("⚠️ No se pudo generar la miniatura con OpenAI.")
 
             # 5. Editar Video
             logger.info("5/6 Editando video final...")
@@ -173,23 +185,8 @@ class VideoAutoPipeline:
                 thumbnail_path=thumbnail_path # Pasamos la miniatura si existe
             )
             
-            # 6. Control de Calidad Final
-            logger.info("6/6 Realizando control de calidad...")
-            qc_results = self.quality_checker.check_video(video_path, script_data=script_data)
-            
-            # Si no se generó miniatura antes, se usa la de QC
-            if not thumbnail_path:
-                thumbnail_path = qc_results.get('thumbnail_path')
-            
-            # MEJORA: Si es películas, intentar miniatura de TMDB primero
-            if "películas" in categoria.lower():
-                tmdb_thumb = str(output_dir / "tmdb_thumb.jpg")
-                thumbnail_search_term = peliprex_movie_name if "peliprex_movie_name" in locals() else topic
-                if self.media_fetcher.generate_thumbnail(thumbnail_search_term, video_title, tmdb_thumb, categoria=categoria):
-                    thumbnail_path = tmdb_thumb
-
-            # 7. Subir a YouTube
-            logger.info("7/7 Programando subida a YouTube...")
+            # 6. Subir a YouTube
+            logger.info("6/6 Programando subida a YouTube...")
             publish_time = self.scheduler.calculate_publish_time(preferred_time=optimal_time)
             
             # Configuración SEO y Categoría YouTube
@@ -217,8 +214,6 @@ class VideoAutoPipeline:
             logger.info(f"📅 Programado para: {publish_time}")
 
             # --- POLÍTICA DE RESIDUO CERO ---
-            # Esperar un momento para asegurar que los procesos de subida de YouTube 
-            # (que a veces tienen hilos internos o latencia en el API) hayan cerrado los archivos.
             logger.info("⏳ Esperando 10s antes de la limpieza para asegurar integridad de subida...")
             time.sleep(10)
             
@@ -245,7 +240,7 @@ class VideoAutoPipeline:
                 shutil.rmtree(temp_assets_dir)
                 logger.info(f"🗑️ Eliminado directorio de media temporal: {temp_assets_dir}")
             
-            # Limpieza de caché de MoviePy (Mejora 2)
+            # Limpieza de caché de MoviePy
             import tempfile
             temp_dir = Path(tempfile.gettempdir())
             for moviepy_file in temp_dir.glob("tmpxxx*"):
@@ -258,7 +253,6 @@ class VideoAutoPipeline:
 
     def _keep_alive_task(self):
         """Tarea que envía peticiones GET /keep-alive para mantener la máquina encendida."""
-        # En Fly.io, usamos la URL interna para mayor confiabilidad, o localhost como respaldo
         app_name = os.getenv("FLY_APP_NAME")
         urls = []
         if app_name:
@@ -272,18 +266,16 @@ class VideoAutoPipeline:
             success = False
             for url in urls:
                 try:
-                    # Usamos un timeout corto para no bloquear el hilo
                     requests.get(url, timeout=5)
                     logger.debug(f"❤️ Keep-alive enviado a {url}")
                     success = True
-                    break # Si una funciona, es suficiente
+                    break 
                 except Exception:
                     continue
             
             if not success:
                 logger.warning("⚠️ No se pudo enviar la señal keep-alive a ninguna URL.")
             
-            # Esperar 15 segundos antes de la siguiente señal para evitar el auto-stop de Fly.io
             time.sleep(15)
 
     def _start_keep_alive(self):
