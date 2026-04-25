@@ -167,24 +167,28 @@ class TTSEngine:
             except: pass
         
         # 2. ELIMINAR ETIQUETAS TÉCNICAS Y METADATOS (Regex Reforzado)
-        # Eliminar bloques XML/SSML completos que puedan venir en el texto
-        text = re.sub(r'<[^>]*>.*?</[^>]*>', '', text, flags=re.DOTALL)
-        # Eliminar etiquetas sueltas
-        text = re.sub(r'<[^>]*>', '', text)
-        
-        # Eliminar etiquetas de estructura de guion comunes
+        # Eliminar fragmentos de código SSML/XML específicos que el usuario reportó
+        technical_patterns = [
+            r'SPEAK VERSION=[\'"].*?[\'"]',
+            r'XMLNS=[\'"]HTTP://WWW\.W3\.ORG/2001/10/SYNTHESIS[\'"]',
+            r'XML:LANG=[\'"]ES-MX[\'"]',
+            r'VOICE NAME=[\'"].*?[\'"]',
+            r'PROSODY RATE=[\'"].*?[\'"]',
+            r'PITCH=[\'"].*?[\'"]',
+            r'HTTP://WWW\.W3\.ORG/2001/10/SYNTHESIS'
+        ]
+        for pattern in technical_patterns:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+
+        # Eliminar etiquetas XML/SSML (ej: <speak>, </speak>, <voice...>)
+        text = re.sub(r'<[^>]+>', '', text)
+
+        # Eliminar etiquetas de estructura de guion comunes (Narrador:, Escena 1:, etc.)
         script_tags = [
-            r'^Guion:.*$', r'^Script:.*$', r'^TTS:.*$', r'^\[TTS\].*$',
-            r'^Narrador:.*$', r'^Voz en off:.*$', r'^Escena \d+:.*$',
-            r'^Introducción:.*$', r'^Capítulo \d+:.*$', r'^Conclusión:.*$'
+            r'^(Guion|Script|TTS|\[TTS\]|Narrador|Voz en off|Escena \d+|Introducción|Capítulo \d+|Conclusión):\s*',
         ]
         for tag in script_tags:
             text = re.sub(tag, '', text, flags=re.IGNORECASE | re.MULTILINE)
-
-        # Eliminar palabras técnicas sueltas que la IA a veces incluye
-        technical_terms = [r'\bXML\b', r'\bSSML\b', r'\bGuion\b', r'\bMetadatos\b']
-        for term in technical_terms:
-            text = re.sub(term, '', text, flags=re.IGNORECASE)
         
         # 3. Limpieza de formato Markdown y caracteres especiales
         text = re.sub(r'\*\*|__', '', text)
