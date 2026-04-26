@@ -195,7 +195,7 @@ class TTSEngine:
         technical_patterns = [
             r'(?i)speak version=[\'"].*?[\'"]',
             r'(?i)xmlns=[\'"]http://www\.w3\.org/2001/10/synthesis[\'"]',
-            r'(?i)xml:lang=[\'"]es-mx[\'"]',
+            r'(?i)xml:lang=[\'"]es-[a-z]{2}[\'"]',
             r'(?i)voice name=[\'"].*?[\'"]',
             r'(?i)prosody rate=[\'"].*?[\'"]',
             r'(?i)pitch=[\'"].*?[\'"]',
@@ -208,8 +208,9 @@ class TTSEngine:
         for pattern in technical_patterns:
             text = re.sub(pattern, '', text)
 
-        # Eliminar etiquetas XML/SSML (ej: <speak>, </speak>, <voice...>)
-        text = re.sub(r'<[^>]+>', '', text)
+        # Eliminar etiquetas XML/SSML completas (ej: <speak>, </speak>, <voice...>)
+        # Usamos una regex que captura etiquetas con o sin atributos
+        text = re.sub(r'<[^>]*>', '', text)
 
         # Eliminar etiquetas de estructura de guion comunes (Narrador:, Escena 1:, etc.)
         script_tags = [
