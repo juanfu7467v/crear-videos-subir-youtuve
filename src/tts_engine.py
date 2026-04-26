@@ -181,60 +181,53 @@ class TTSEngine:
     def _clean_text(self, text: str) -> str:
         if not text: return ""
         
-        # 1. Si el texto es un JSON (a veces pasa si la IA devuelve el objeto completo)
-        if text.strip().startswith('{') and '}' in text:
+        # 1. Si el texto es un JSON completo (a veces la IA lo envía así)
+        if text.strip().startswith('{'):
             try:
                 data = json.loads(text)
-                if isinstance(data, dict):
-                    text = data.get('full_script', text)
+                text = data.get('full_script', text)
             except: pass
         
-        # 2. ELIMINAR ETIQUETAS TÉCNICAS Y METADATOS (Regex Reforzado)
-        # Eliminar fragmentos de código SSML/XML específicos que el usuario reportó
-        # Buscamos patrones que parezcan etiquetas o atributos SSML incluso si están mal formados
-        technical_patterns = [
-            r'(?i)speak version=[\'"].*?[\'"]',
-            r'(?i)xmlns=[\'"]http://www\.w3\.org/2001/10/synthesis[\'"]',
-            r'(?i)xml:lang=[\'"]es-[a-z]{2}[\'"]',
-            r'(?i)voice name=[\'"].*?[\'"]',
-            r'(?i)prosody rate=[\'"].*?[\'"]',
-            r'(?i)pitch=[\'"].*?[\'"]',
+        # 2. ELIMINACIÓN AGRESIVA DE BASURA TÉCNICA (Lo que escuchamos en el video)
+        # Eliminamos bloques completos de metadatos SSML que la IA pueda haber incluido
+        # Esto busca patrones como 'speak version...', 'xmlns...', etc., y los elimina junto con sus valores
+        technical_metadata_patterns = [
+            r'(?i)speak\s+version\s*=\s*[\'"].*?[\'"]',
+            r'(?i)xmlns\s*=\s*[\'"].*?[\'"]',
+            r'(?i)xml:lang\s*=\s*[\'"].*?[\'"]',
+            r'(?i)voice\s+name\s*=\s*[\'"].*?[\'"]',
+            r'(?i)prosody\s+rate\s*=\s*[\'"].*?[\'"]',
+            r'(?i)pitch\s*=\s*[\'"].*?[\'"]',
+            r'(?i)version\s*=\s*[\'"]1\.0[\'"]',
             r'(?i)http://www\.w3\.org/2001/10/synthesis',
-            r'(?i)voice name=',
-            r'(?i)prosody rate=',
-            r'(?i)xml:lang=',
-            r'(?i)version=[\'"]1\.0[\'"]'
+            r'(?i)jorgeNeural', r'(?i)daliaNeural', r'(?i)emilioNeural'
         ]
-        for pattern in technical_patterns:
+        for pattern in technical_metadata_patterns:
             text = re.sub(pattern, '', text)
 
-        # Eliminar etiquetas XML/SSML completas (ej: <speak>, </speak>, <voice...>)
-        # Usamos una regex que captura etiquetas con o sin atributos
+        # 3. Eliminar etiquetas XML/SSML (ej: <speak>, <prosody>, etc.)
         text = re.sub(r'<[^>]*>', '', text)
 
-        # Eliminar etiquetas de estructura de guion comunes (Narrador:, Escena 1:, etc.)
-        script_tags = [
-            r'^(Guion|Script|TTS|\[TTS\]|Narrador|Voz en off|Escena \d+|Introducción|Capítulo \d+|Conclusión):\s*',
+        # 4. Eliminar cabeceras de la IA (Título:, Introducción:, [Música])
+        headers = [
+            r'(?im)^(Título|Guion|Script|Narrador|Voz en off|Introducción|Capítulo \d+|Conclusión|Escena \d+):\s*',
+            r'\[.*?\]',  # Elimina todo lo que esté entre corchetes [Música]
+            r'\(.*?\)'   # Elimina todo lo que esté entre paréntesis (Suspiros)
         ]
-        for tag in script_tags:
-            text = re.sub(tag, '', text, flags=re.IGNORECASE | re.MULTILINE)
+        for pattern in headers:
+            text = re.sub(pattern, '', text)
+
+        # 5. Limpieza de formato y caracteres raros
+        text = text.replace('\\n', ' ').replace('\\"', '"').replace('*', '')
         
-        # 3. Limpieza de formato Markdown y caracteres especiales
-        text = re.sub(r'\*\*|__', '', text)
-        text = re.sub(r'#+\s+', '', text)
+        # Limpieza de símbolos técnicos residuales pero manteniendo puntuación básica
+        text = re.sub(r'[#@$%^&*={}\[\]<>|\\/_]', ' ', text)
         
-        # Eliminar comillas y barras invertidas que a veces vienen de escapes JSON
-        text = text.replace('\\n', ' ').replace('\\"', '"').replace('\\', '')
-        
-        # 4. Aplicar diccionario de pronunciación
+        # Aplicar correcciones de pronunciación (Rambo, Stallone, etc.)
         text = self._apply_pronunciation_dictionary(text)
         
-        # 5. Limpieza final de caracteres que no deben ser narrados
-        # Pero mantenemos puntuación básica para la entonación
-        text = re.sub(r'[{|\[\]/@#$%^&*+=~]', ' ', text)
+        # Normalizar espacios y puntos
         text = text.replace('...', '.')
-        
-        # Normalizar espacios
         text = re.sub(r'\s+', ' ', text)
         
         return text.strip()

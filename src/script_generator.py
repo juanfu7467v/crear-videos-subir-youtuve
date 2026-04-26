@@ -116,11 +116,11 @@ class ScriptGenerator:
                 "3. LA REVELACIÓN: El dato o momento clave que nadie esperaba.\n"
                 "4. CIERRE MAESTRO: Una conclusión potente.\n"
                 "\nREQUISITOS TÉCNICOS:\n"
-                "- PROHIBICIÓN ABSOLUTA: No incluyas títulos de secciones como 'Introducción', 'Gancho', 'Capítulo' o instrucciones entre corchetes [] o paréntesis () en el campo 'full_script' ni en 'segment_text'.\n"
-                "- NARRACIÓN COMPLETA: No cortes el guion. Debe terminar con una frase de impacto.\n"
-                "- PALABRAS POR SEGUNDO: El guion debe tener unas 130-150 palabras para durar ~50-55 segundos.\n"
-                "- IDIOMA: Español natural, directo, sin palabras complejas.\n"
-                "- NO SSML: No incluyas etiquetas XML o SSML como <speak>, <voice>, o <prosody>. Solo texto plano.\n"
+                "- PROHIBICIÓN ABSOLUTA: No incluyas NINGUNA etiqueta XML, SSML o código. "
+                "- No escribas 'Título:', 'Narrador:', 'Introducción:', ni instrucciones entre corchetes []. "
+                "- El texto del campo 'full_script' debe ser exclusivamente lo que el locutor va a decir. "
+                "- Si incluyes palabras como 'speak', 'xml', 'voice' o 'prosody', el sistema fallará. "
+                "- Solo texto humano narrable de principio a fin.\n"
             )
         else:
             # PROMPT ESPECÍFICO PARA VIDEOS LARGOS
@@ -136,10 +136,11 @@ class ScriptGenerator:
                 "3. ANÁLISIS: Aporta datos, curiosidades o teorías que no sean obvias.\n"
                 "4. CONCLUSIÓN: Resume lo aprendido y deja una pregunta abierta a la audiencia.\n"
                 "\nREQUISITOS TÉCNICOS:\n"
-                "- PROHIBICIÓN ABSOLUTA: No incluyas títulos de secciones como 'Introducción', 'Capítulo X', 'Conclusión' o instrucciones entre corchetes [] o paréntesis () en el campo 'full_script' ni en 'segment_text'. El texto debe ser 100% narrable de principio a fin.\n"
-                "- NO SSML: No incluyas etiquetas XML o SSML como <speak>, <voice>, o <prosody>. Solo texto plano.\n"
-                "- DURACIÓN: Guion para 5-8 minutos de locución (aprox. 800-1200 palabras).\n"
-                "- TONO: Profesional, autoritario pero cercano.\n"
+                "- PROHIBICIÓN ABSOLUTA: No incluyas NINGUNA etiqueta XML, SSML o código. "
+                "- No escribas 'Título:', 'Narrador:', 'Introducción:', ni instrucciones entre corchetes []. "
+                "- El texto del campo 'full_script' debe ser exclusivamente lo que el locutor va a decir. "
+                "- Si incluyes palabras como 'speak', 'xml', 'voice' o 'prosody', el sistema fallará. "
+                "- Solo texto humano narrable de principio a fin.\n"
                 )
 
         prompt += (
