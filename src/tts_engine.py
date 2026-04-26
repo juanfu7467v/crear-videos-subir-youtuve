@@ -36,22 +36,11 @@ class TTSEngine:
         # Aseguramos que el texto esté limpio para evitar que se lean etiquetas SSML
         clean_text = self._clean_text(text)
         
-        # Construir SSML para mejorar entonación y dinamismo
-        # IMPORTANTE: El texto dentro de {clean_text} NO debe contener etiquetas < > &
-        ssml_text = clean_text.replace("&", " y ").replace("<", " ").replace(">", " ")
-        
-        ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='es-MX'>
-            <voice name='{voice}'>
-                <prosody rate='{rate}' pitch='{pitch}'>
-                    {ssml_text}
-                </prosody>
-            </voice>
-        </speak>"""
-        
         try:
-            # Intentar usar SSML
-            communicate = edge_tts.Communicate(ssml, voice)
-            logger.info("Utilizando SSML para mejorar entonación y ritmo.")
+            # NO USAR SSML MANUAL: Usar parámetros nativos de edge_tts
+            # Esto evita que el motor lea etiquetas <speak> por errores de sintaxis
+            communicate = edge_tts.Communicate(clean_text, voice, rate=rate, pitch=pitch)
+            logger.info(f"Generando audio nativo (Voz: {voice}, Rate: {rate}, Pitch: {pitch})")
             
             word_timestamps = []
             sentence_boundaries = []
@@ -73,22 +62,12 @@ class TTSEngine:
                             "duration": chunk["duration"] / 10**7
                         })
         except Exception as e:
-            logger.warning(f"Fallo al generar con SSML, reintentando con texto plano: {e}")
-            # Fallback a texto plano si SSML falla (por caracteres especiales no escapados, etc)
+            logger.error(f"Error generando audio con timestamps: {e}")
+            # Fallback simple
             communicate = edge_tts.Communicate(clean_text, voice, rate=rate, pitch=pitch)
+            await communicate.save(output_path)
             word_timestamps = []
             sentence_boundaries = []
-            
-            with open(output_path, "wb") as f:
-                async for chunk in communicate.stream():
-                    if chunk["type"] == "audio":
-                        f.write(chunk["data"])
-                    elif chunk["type"] == "WordBoundary":
-                        word_timestamps.append({
-                            "word": chunk["text"],
-                            "start": chunk["offset"] / 10**7, 
-                            "duration": chunk["duration"] / 10**7
-                        })
         
         if not word_timestamps and sentence_boundaries:
             logger.info("⚠️ WordBoundaries no disponibles, interpolando desde SentenceBoundaries...")

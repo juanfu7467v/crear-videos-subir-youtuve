@@ -120,7 +120,8 @@ class ScriptGenerator:
                 "- No escribas 'Título:', 'Narrador:', 'Introducción:', ni instrucciones entre corchetes []. "
                 "- El texto del campo 'full_script' debe ser exclusivamente lo que el locutor va a decir. "
                 "- Si incluyes palabras como 'speak', 'xml', 'voice' o 'prosody', el sistema fallará. "
-                "- Solo texto humano narrable de principio a fin.\n"
+                "- Solo texto humano narrable de principio a fin. "
+                "- NUNCA uses barras diagonales '/' o símbolos matemáticos. Escribe 'y' en lugar de '&'.\n"
             )
         else:
             # PROMPT ESPECÍFICO PARA VIDEOS LARGOS
@@ -140,7 +141,8 @@ class ScriptGenerator:
                 "- No escribas 'Título:', 'Narrador:', 'Introducción:', ni instrucciones entre corchetes []. "
                 "- El texto del campo 'full_script' debe ser exclusivamente lo que el locutor va a decir. "
                 "- Si incluyes palabras como 'speak', 'xml', 'voice' o 'prosody', el sistema fallará. "
-                "- Solo texto humano narrable de principio a fin.\n"
+                "- Solo texto humano narrable de principio a fin. "
+                "- NUNCA uses barras diagonales '/' o símbolos matemáticos. Escribe 'y' en lugar de '&'.\n"
                 )
 
         prompt += (
