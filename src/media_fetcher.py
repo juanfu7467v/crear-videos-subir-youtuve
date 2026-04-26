@@ -67,7 +67,7 @@ class MediaFetcher:
         media_list = []
         
         format_label = "Short" if is_short else "Largo"
-        logger.info(f"Buscando clips para {target_duration}s de video ({format_label}) con patrón alternado PeliPrex/Archive + Stock.")
+        logger.info(f"Buscando clips para {target_duration}s de video ({format_label}) con sincronización por segmentos.")
         
         # 1. Obtener el término de búsqueda real de la película
         movie_title = ""
@@ -81,24 +81,17 @@ class MediaFetcher:
             movie_title = self.peliprex_downloader.clean_movie_title(raw_title)
             logger.info(f"Usando limpieza de texto para título: {movie_title}")
         
-        # 2. Ajuste de duración para Shorts
-        if is_short:
-            target_duration = 60
-            logger.info(f"Ajustando target_duration a exactamente {target_duration}s para Short.")
-
-        # 3. Calcular cantidad de clips necesarios para el patrón (7s película + 7s stock = 14s por ciclo)
-        # Añadimos un margen de seguridad
-        cycles_needed = (target_duration // 14) + 2
-        clips_needed_each = cycles_needed * 2
+        # 2. Descargar clips de Película (PeliPrex y Archive.org como respaldo)
+        # Calculamos cuántos clips de película necesitamos (al menos uno por cada 2 segmentos o cada 15 segundos)
+        movie_clips_needed = max(len(segmented_script), (target_duration // 7) + 2)
+        logger.info(f"Descargando clips de película para: {movie_title} (Necesarios: {movie_clips_needed})")
         
-        # 4. Descargar clips de Película (PeliPrex y Archive.org como respaldo)
-        logger.info(f"Descargando clips de película para: {movie_title}")
-        peliprex_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, clips_needed_each)
+        peliprex_clips = self.peliprex_downloader.fetch_movie_clips(movie_title, save_dir, movie_clips_needed)
         
         archive_clips = []
-        if len(peliprex_clips) < clips_needed_each:
-            needed_from_archive = clips_needed_each - len(peliprex_clips)
-            logger.info(f"PeliPrex insuficiente, buscando {needed_from_archive} clips en Archive.org para: {movie_title}")
+        if len(peliprex_clips) < movie_clips_needed:
+            needed_from_archive = movie_clips_needed - len(peliprex_clips)
+            logger.info(f"PeliPrex insuficiente ({len(peliprex_clips)}/{movie_clips_needed}), buscando en Archive.org para: {movie_title}")
             archive_clips = self.archive_smart_downloader.fetch_smart_clips(movie_title, save_dir, needed_from_archive)
             
             if not archive_clips:
@@ -106,82 +99,89 @@ class MediaFetcher:
                 if legacy_item:
                     archive_clips = [legacy_item]
 
-        # 5. Recopilar palabras clave para Stock
-        all_keywords = []
-        for segment in segmented_script:
-            all_keywords.extend(process_keywords(segment.get("keywords", "")))
-        if not all_keywords: all_keywords = ["cinematic movie scene"]
-
-        # 6. Composición con patrón alternado: Película (7s) -> Stock (7s)
-        current_total_duration = 0
-        clip_index = 0
-        
-        # Combinar clips de película (PeliPrex primero, luego Archive)
         movie_pool = peliprex_clips + archive_clips
+        logger.info(f"Pool de clips de película listo: {len(movie_pool)} clips.")
+
+        # 3. Procesar cada segmento del guion para asignar visuales
+        current_total_duration = 0
         
-        while current_total_duration < target_duration:
-            # --- FASE A: CLIP DE PELÍCULA (7s) ---
-            movie_item = None
+        for i, segment in enumerate(segmented_script):
+            segment_text = segment.get("segment_text", "")
+            # Duración estimada del segmento (mínimo 5s para que se vea algo)
+            seg_duration = float(segment.get("estimated_duration", 7.0))
+            if seg_duration < 4.0: seg_duration = 4.0
             
+            keywords = process_keywords(segment.get("keywords", []))
+            if not keywords: keywords = [movie_title, "cinematic movie scene"]
+            
+            logger.info(f"Procesando segmento {i+1}/{len(segmented_script)} ({seg_duration}s): {segment_text[:50]}...")
+            
+            # Decidir si usar clip de película o stock
+            # Prioridad: Película si hay en el pool, especialmente en segmentos impares o si el pool es grande
+            use_movie = False
             if movie_pool:
-                movie_item = movie_pool.pop(0)
-                logger.info(f"Ciclo {clip_index}: Usando clip de película ({movie_item.get('source', 'unknown')}).")
+                # Si tenemos muchos clips de película, los usamos casi siempre
+                if len(movie_pool) >= (len(segmented_script) - i):
+                    use_movie = True
+                # Si no, alternamos o priorizamos el inicio/fin
+                elif i % 2 == 0 or i == len(segmented_script) - 1:
+                    use_movie = True
+            
+            visual_item = None
+            
+            if use_movie and movie_pool:
+                visual_item = movie_pool.pop(0)
+                logger.info(f"Segmento {i+1}: Usando clip de película ({visual_item.get('source')})")
             else:
-                # Fallback final de película: GetYarn o Pexels con el título
-                yarn_clips = self.movie_clips_fetcher.fetch_movie_clips(movie_title, save_dir, 1)
-                if yarn_clips:
-                    movie_item = yarn_clips[0]
-                    logger.info(f"Ciclo {clip_index}: Usando GetYarn como fallback de película.")
-                else:
-                    orientation = "portrait" if is_short else "landscape"
-                    movie_item = self._fetch_pexels_video(movie_title, save_dir, f"fallback_movie_{clip_index}", orientation)
-                    if movie_item:
-                        logger.info(f"Ciclo {clip_index}: Usando Pexels con título de película como fallback.")
+                # Intentar Stock (Pexels/Pixabay) basado en keywords del segmento
+                kw = random.choice(keywords)
+                orientation = "portrait" if is_short else "landscape"
+                
+                if self.pexels_key:
+                    visual_item = self._fetch_pexels_video(kw, save_dir, f"seg_{i:02d}", orientation)
+                
+                if not visual_item and self.pixabay_key:
+                    visual_item = self._fetch_pixabay_video(kw, save_dir, f"seg_{i:02d}")
+                
+                # Si falla el stock específico, intentar usar película si queda algo
+                if not visual_item and movie_pool:
+                    visual_item = movie_pool.pop(0)
+                    logger.info(f"Segmento {i+1}: Stock falló, usando clip de película de reserva.")
+                
+                # Fallback final: Imagen AI o Pexels con el título de la película
+                if not visual_item:
+                    logger.info(f"Segmento {i+1}: Buscando fallback para '{kw}'")
+                    visual_item = self._fetch_pexels_video(movie_title, save_dir, f"fallback_{i:02d}", orientation)
+                    if not visual_item:
+                        visual_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{i:02d}", is_short)
 
-            if movie_item:
-                movie_item["segment_duration"] = 7.0
-                media_list.append(movie_item)
-                current_total_duration += 7.0
+            if visual_item:
+                visual_item["segment_duration"] = seg_duration
+                media_list.append(visual_item)
+                current_total_duration += seg_duration
             
-            if current_total_duration >= target_duration: break
-
-            # --- FASE B: CLIP DE STOCK (7s) ---
-            stock_item = None
-            kw = random.choice(all_keywords)
-            orientation = "portrait" if is_short else "landscape"
-            
-            # Intentar Pexels
-            if self.pexels_key:
-                stock_item = self._fetch_pexels_video(kw, save_dir, f"stock_{clip_index:03d}", orientation)
-            
-            # Intentar Pixabay
-            if not stock_item and self.pixabay_key:
-                stock_item = self._fetch_pixabay_video(kw, save_dir, f"stock_{clip_index:03d}")
-            
-            # Fallback: Imagen AI
-            if not stock_item:
-                logger.info(f"Ciclo {clip_index}: Generando imagen AI de stock para '{kw}'")
-                stock_item = self._fetch_pollinations_image(kw, save_dir, f"ai_{clip_index:03d}", is_short)
-
-            if stock_item:
-                stock_item["segment_duration"] = 7.0
-                media_list.append(stock_item)
-                current_total_duration += 7.0
-            
-            clip_index += 1
+            # Pequeña pausa para no saturar APIs
             time.sleep(0.1)
 
-        # Si la lista está vacía, generar fallbacks de emergencia
-        if not media_list:
-            logger.warning("No se pudo descargar ningún media. Generando imágenes AI de fallback...")
-            for i in range(5):
-                kw_fallback = "cinematic movie scene"
-                item = self._fetch_pollinations_image(kw_fallback, save_dir, f"fallback_{i}", is_short)
-                if item:
-                    item["segment_duration"] = 7.0
-                    media_list.append(item)
+        # 4. Relleno de seguridad si no llegamos a la duración objetivo
+        while current_total_duration < target_duration:
+            extra_duration = 7.0
+            if movie_pool:
+                item = movie_pool.pop(0)
+            else:
+                orientation = "portrait" if is_short else "landscape"
+                item = self._fetch_pexels_video(movie_title, save_dir, f"extra_{len(media_list)}", orientation)
+                if not item:
+                    item = self._fetch_pollinations_image(movie_title, save_dir, f"extra_ai_{len(media_list)}", is_short)
+            
+            if item:
+                item["segment_duration"] = extra_duration
+                media_list.append(item)
+                current_total_duration += extra_duration
+            else:
+                break
 
-        logger.info(f"Media total procesada: {len(media_list)} elementos siguiendo el patrón alternado.")
+        logger.info(f"Media total procesada: {len(media_list)} elementos sincronizados con el guion.")
         return media_list
 
     def _fetch_pexels_video(self, keyword: str, save_dir: Path, prefix: str, orientation: str = "portrait") -> Optional[dict]:

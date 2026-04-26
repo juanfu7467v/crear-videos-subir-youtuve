@@ -205,8 +205,7 @@ class PeliprexDownloader:
             res_title = res.get('titulo', '')
             normalized_res_title = self._normalize_text(res_title)
             
-            # Coincidencia casi exacta: el query debe estar contenido o ser igual al título normalizado
-            # O el título debe contener todas las palabras del query en orden
+            # Coincidencia exacta/fuerte encontrada
             if normalized_query == normalized_res_title or normalized_query in normalized_res_title:
                 filtered_results.append(res)
                 logger.info(f"Coincidencia exacta/fuerte encontrada: '{res_title}'")
@@ -224,14 +223,15 @@ class PeliprexDownloader:
         logger.info(f"Total de películas coincidentes con archivos directos: {len(filtered_results)}")
         
         downloaded_clips = []
-        suggested_starts = [600, 1200, 1800, 2400, 3000, 3600, 4200, 4800]
+        # Aumentamos los puntos de inicio sugeridos para tener más variedad
+        suggested_starts = [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000, 3300, 3600, 3900, 4200, 4500, 4800]
         random.shuffle(suggested_starts)
 
-        # Barajar resultados para evitar siempre los mismos (que pueden estar rotos)
+        # Barajar resultados para evitar siempre los mismos
         random.shuffle(filtered_results)
         
-        # Intentar con más resultados si algunos fallan (404)
-        max_attempts = min(len(filtered_results) * 2, clips_needed * 3)
+        # Intentar con más resultados si algunos fallan
+        max_attempts = min(len(filtered_results) * 3, clips_needed * 4)
         attempts = 0
         
         while len(downloaded_clips) < clips_needed and attempts < max_attempts:
@@ -241,13 +241,14 @@ class PeliprexDownloader:
             video_url = result.get("pelicula_url") or result.get("direct_link") or result.get("stream_url")
             if not video_url: continue
             
-            # Evitar streams conocidos por dar 404 según logs (385, 383, 381)
+            # Evitar streams conocidos por dar 404
             if any(f"stream/{s}" in video_url for s in ["385", "383", "381"]):
                 logger.warning(f"Omitiendo stream conocido por error 404: {video_url}")
                 continue
             
-            start_time = suggested_starts[len(downloaded_clips) % len(suggested_starts)] + random.randint(0, 300)
-            duration = 7 # Ritmo 7-10-7
+            # Seleccionar un tiempo de inicio y asegurar que no se repita demasiado
+            start_time = suggested_starts[len(downloaded_clips) % len(suggested_starts)] + random.randint(0, 150)
+            duration = 8 # Aumentamos ligeramente la duración por clip
             
             output_path = save_dir / f"peliprex_{len(downloaded_clips):03d}.mp4"
             

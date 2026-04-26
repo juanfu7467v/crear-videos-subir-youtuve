@@ -37,40 +37,58 @@ class TTSEngine:
         clean_text = self._clean_text(text)
         
         # Construir SSML para mejorar entonación y dinamismo
+        # IMPORTANTE: El texto dentro de {clean_text} NO debe contener etiquetas < > &
+        ssml_text = clean_text.replace("&", " y ").replace("<", " ").replace(">", " ")
+        
         ssml = f"""<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='es-MX'>
             <voice name='{voice}'>
                 <prosody rate='{rate}' pitch='{pitch}'>
-                    {clean_text}
+                    {ssml_text}
                 </prosody>
             </voice>
         </speak>"""
         
         try:
+            # Intentar usar SSML
             communicate = edge_tts.Communicate(ssml, voice)
             logger.info("Utilizando SSML para mejorar entonación y ritmo.")
+            
+            word_timestamps = []
+            sentence_boundaries = []
+            
+            with open(output_path, "wb") as f:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        f.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        word_timestamps.append({
+                            "word": chunk["text"],
+                            "start": chunk["offset"] / 10**7, 
+                            "duration": chunk["duration"] / 10**7
+                        })
+                    elif chunk["type"] == "SentenceBoundary":
+                        sentence_boundaries.append({
+                            "text": chunk["text"],
+                            "start": chunk["offset"] / 10**7,
+                            "duration": chunk["duration"] / 10**7
+                        })
         except Exception as e:
-            logger.warning(f"Fallo al inicializar SSML, usando texto plano: {e}")
+            logger.warning(f"Fallo al generar con SSML, reintentando con texto plano: {e}")
+            # Fallback a texto plano si SSML falla (por caracteres especiales no escapados, etc)
             communicate = edge_tts.Communicate(clean_text, voice, rate=rate, pitch=pitch)
-
-        word_timestamps = []
-        sentence_boundaries = []
-        
-        with open(output_path, "wb") as f:
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    f.write(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
-                    word_timestamps.append({
-                        "word": chunk["text"],
-                        "start": chunk["offset"] / 10**7, 
-                        "duration": chunk["duration"] / 10**7
-                    })
-                elif chunk["type"] == "SentenceBoundary":
-                    sentence_boundaries.append({
-                        "text": chunk["text"],
-                        "start": chunk["offset"] / 10**7,
-                        "duration": chunk["duration"] / 10**7
-                    })
+            word_timestamps = []
+            sentence_boundaries = []
+            
+            with open(output_path, "wb") as f:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        f.write(chunk["data"])
+                    elif chunk["type"] == "WordBoundary":
+                        word_timestamps.append({
+                            "word": chunk["text"],
+                            "start": chunk["offset"] / 10**7, 
+                            "duration": chunk["duration"] / 10**7
+                        })
         
         if not word_timestamps and sentence_boundaries:
             logger.info("⚠️ WordBoundaries no disponibles, interpolando desde SentenceBoundaries...")
@@ -106,6 +124,9 @@ class TTSEngine:
         pitch = pitch or self.default_pitch
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Limpieza preventiva antes de cualquier proceso
+        text = self._clean_text(text)
         text = text[:8000]
         
         logger.info(f"Generando TTS con timestamps para voz: {voice}")
@@ -158,6 +179,8 @@ class TTSEngine:
         return text
 
     def _clean_text(self, text: str) -> str:
+        if not text: return ""
+        
         # 1. Si el texto es un JSON (a veces pasa si la IA devuelve el objeto completo)
         if text.strip().startswith('{') and '}' in text:
             try:
@@ -168,17 +191,22 @@ class TTSEngine:
         
         # 2. ELIMINAR ETIQUETAS TÉCNICAS Y METADATOS (Regex Reforzado)
         # Eliminar fragmentos de código SSML/XML específicos que el usuario reportó
+        # Buscamos patrones que parezcan etiquetas o atributos SSML incluso si están mal formados
         technical_patterns = [
-            r'SPEAK VERSION=[\'"].*?[\'"]',
-            r'XMLNS=[\'"]HTTP://WWW\.W3\.ORG/2001/10/SYNTHESIS[\'"]',
-            r'XML:LANG=[\'"]ES-MX[\'"]',
-            r'VOICE NAME=[\'"].*?[\'"]',
-            r'PROSODY RATE=[\'"].*?[\'"]',
-            r'PITCH=[\'"].*?[\'"]',
-            r'HTTP://WWW\.W3\.ORG/2001/10/SYNTHESIS'
+            r'(?i)speak version=[\'"].*?[\'"]',
+            r'(?i)xmlns=[\'"]http://www\.w3\.org/2001/10/synthesis[\'"]',
+            r'(?i)xml:lang=[\'"]es-mx[\'"]',
+            r'(?i)voice name=[\'"].*?[\'"]',
+            r'(?i)prosody rate=[\'"].*?[\'"]',
+            r'(?i)pitch=[\'"].*?[\'"]',
+            r'(?i)http://www\.w3\.org/2001/10/synthesis',
+            r'(?i)voice name=',
+            r'(?i)prosody rate=',
+            r'(?i)xml:lang=',
+            r'(?i)version=[\'"]1\.0[\'"]'
         ]
         for pattern in technical_patterns:
-            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+            text = re.sub(pattern, '', text)
 
         # Eliminar etiquetas XML/SSML (ej: <speak>, </speak>, <voice...>)
         text = re.sub(r'<[^>]+>', '', text)
@@ -193,21 +221,19 @@ class TTSEngine:
         # 3. Limpieza de formato Markdown y caracteres especiales
         text = re.sub(r'\*\*|__', '', text)
         text = re.sub(r'#+\s+', '', text)
-        text = text.replace('"', '').replace("'", "").replace('\\n', ' ').replace('\\', '')
-        text = text.replace('_', ' ')
-        text = re.sub(r'[-—–]', ' ', text)
         
-        # Caracteres que rompen el XML o suenan mal
-        text = text.replace('&', ' y ')
-        text = text.replace('<', ' ').replace('>', ' ')
-        
-        text = re.sub(r'[{|\[\]/@#$%^&*+=~]', ' ', text)
-        text = text.replace('...', '.')
-        text = re.sub(r'\s+([,.?!])', r'\1', text)
+        # Eliminar comillas y barras invertidas que a veces vienen de escapes JSON
+        text = text.replace('\\n', ' ').replace('\\"', '"').replace('\\', '')
         
         # 4. Aplicar diccionario de pronunciación
         text = self._apply_pronunciation_dictionary(text)
         
-        # 5. Normalizar espacios
+        # 5. Limpieza final de caracteres que no deben ser narrados
+        # Pero mantenemos puntuación básica para la entonación
+        text = re.sub(r'[{|\[\]/@#$%^&*+=~]', ' ', text)
+        text = text.replace('...', '.')
+        
+        # Normalizar espacios
         text = re.sub(r'\s+', ' ', text)
+        
         return text.strip()
