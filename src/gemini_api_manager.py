@@ -63,9 +63,7 @@ class GeminiAPIManager:
 
     def get_api_url(self, model: str = "gemini-2.5-flash") -> str:
         # Endpoint actualizado según requerimiento
-        return f"https://
-
-generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
+        return f"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
 
 # Instancia global para ser usada en toda la aplicación
 gemini_api_manager = GeminiAPIManager()
