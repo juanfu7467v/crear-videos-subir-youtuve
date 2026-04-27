@@ -90,19 +90,30 @@ class VideoEditor:
         visual_base = CompositeVideoClip(clips, size=(target_w, target_h)) if clips else None
         if not visual_base: raise Exception("No se pudieron cargar clips visuales")
 
-        # Miniatura para Shorts
-        start_offset = 0.0
+        # 3. Miniatura Optimizada para Shorts (Técnica del Final Extendido)
+        # Se coloca al FINAL del video para asegurar el I-Frame en YouTube
+        final_duration = duration
         if is_short and thumbnail_path and os.path.exists(thumbnail_path) and os.path.getsize(thumbnail_path) > 0:
-            thumb_clip = ImageClip(thumbnail_path).set_duration(1.0).set_start(0).resize(height=target_h)
-            if thumb_clip.w < target_w: thumb_clip = thumb_clip.resize(width=target_w)
+            logger.info(f"Implementando técnica de 'Final Extendido' para miniatura: {thumbnail_path}")
+            # Duración de 2.0 segundos para asegurar captura de YouTube
+            thumb_duration = 2.0
+            
+            # Forzar resolución exacta 1080x1920
+            thumb_clip = ImageClip(thumbnail_path).set_duration(thumb_duration).set_start(duration)
+            
+            # Redimensionar y rellenar/recortar para coincidencia exacta
+            thumb_clip = thumb_clip.resize(height=target_h)
+            if thumb_clip.w < target_w: 
+                thumb_clip = thumb_clip.resize(width=target_w)
             thumb_clip = thumb_clip.crop(x_center=thumb_clip.w/2, y_center=thumb_clip.h/2, width=target_w, height=target_h)
-            visual_base = visual_base.set_start(1.0)
-            visual_base = CompositeVideoClip([thumb_clip, visual_base], size=(target_w, target_h))
-            duration += 1.0
-            start_offset = 1.0
+            
+            # Añadir al final de la base visual
+            visual_base = CompositeVideoClip([visual_base, thumb_clip], size=(target_w, target_h))
+            final_duration += thumb_duration
+            logger.info(f"Miniatura añadida al final. Nueva duración: {final_duration}s")
 
-        # 3. Música de Fondo con Bucle (Audio Loop)
-        final_audio = tts_audio.set_start(start_offset)
+        # 4. Música de Fondo con Bucle (Audio Loop)
+        final_audio = tts_audio
         try:
             music_files = list(Path(music_dir).glob("*.mp3"))
             if music_files:
@@ -110,23 +121,23 @@ class VideoEditor:
                 bg_music = AudioFileClip(music_path).volumex(0.15)
                 
                 # Aplicar bucle si la música es más corta que el video
-                if bg_music.duration < duration:
-                    bg_music = bg_music.fx(afx.audio_loop, duration=duration)
+                if bg_music.duration < final_duration:
+                    bg_music = bg_music.fx(afx.audio_loop, duration=final_duration)
                 else:
-                    bg_music = bg_music.set_duration(duration)
+                    bg_music = bg_music.set_duration(final_duration)
                 
                 final_audio = CompositeAudioClip([final_audio, bg_music])
         except Exception as e:
             logger.warning(f"Error al añadir música de fondo: {e}")
 
-        # 4. Composición Base (Sin subtítulos de MoviePy)
-        final_video = visual_base.set_audio(final_audio).set_duration(duration)
+        # 5. Composición Final
+        final_video = visual_base.set_audio(final_audio).set_duration(final_duration)
         
         # Guardar video temporal sin subtítulos
         temp_no_subs = output_path.replace(".mp4", "_no_subs.mp4")
         final_video.write_videofile(temp_no_subs, fps=24, codec="libx264", audio_codec="aac", threads=4, preset="ultrafast", logger=None)
         
-        # 5. SUBTÍTULOS AVANZADOS CON FFmpeg (Estilo ASS/Karaoke)
+        # 6. SUBTÍTULOS AVANZADOS CON FFmpeg (Estilo ASS/Karaoke)
         ts_path = audio_path.replace(".mp3", ".json")
         ass_path = output_path.replace(".mp4", ".ass")
         
@@ -137,12 +148,12 @@ class VideoEditor:
                 
                 # Generar archivo ASS
                 ass_gen = ASSGenerator()
-                ass_gen.generate_ass(word_timestamps, ass_path, start_offset=start_offset)
+                # Nota: Los subtítulos terminan donde termina el audio (duration), 
+                # la miniatura al final no lleva subtítulos.
+                ass_gen.generate_ass(word_timestamps, ass_path, start_offset=0.0)
                 
                 # "Quemar" subtítulos usando FFmpeg directamente
                 logger.info("Quemando subtítulos ASS con FFmpeg...")
-                # Escapar la ruta para el filtro ass de ffmpeg
-                # En FFmpeg, los dos puntos en la ruta del archivo deben escaparse
                 escaped_ass_path = ass_path.replace(":", "\\:")
                 
                 cmd = [
@@ -150,8 +161,6 @@ class VideoEditor:
                     "-vf", f"ass={escaped_ass_path}",
                     "-c:a", "copy", "-preset", "ultrafast", output_path
                 ]
-                # Usamos shell=True si hay problemas con argumentos complejos, 
-                # pero con lista de argumentos suele ser más seguro.
                 subprocess.run(cmd, check=True, capture_output=True)
                 logger.info(f"✅ Video final con subtítulos generado: {output_path}")
                 
@@ -159,7 +168,6 @@ class VideoEditor:
                 if os.path.exists(temp_no_subs): os.remove(temp_no_subs)
             except Exception as e:
                 logger.error(f"Error quemando subtítulos ASS: {e}")
-                # Si falla FFmpeg, usamos el video sin subtítulos como final
                 if os.path.exists(temp_no_subs): os.rename(temp_no_subs, output_path)
         else:
             logger.warning("No se encontraron timestamps, generando video sin subtítulos.")

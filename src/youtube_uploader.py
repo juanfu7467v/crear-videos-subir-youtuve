@@ -129,6 +129,25 @@ class YouTubeUploader:
             is_kids = kwargs.get('is_kids', False)
             tags = kwargs.get('tags', [])
             category_id = kwargs.get('category_id', '22')
+            is_short = kwargs.get('is_short', False)
+
+            # MEJORA: Añadir marcador de capítulo para la miniatura al final si es Short
+            if is_short:
+                try:
+                    import subprocess
+                    result = subprocess.run(
+                        ["ffprobe", "-v", "quiet", "-show_entries", "format=duration", "-of", "csv=p=0", video_path],
+                        capture_output=True, text=True
+                    )
+                    total_dur = float(result.stdout.strip())
+                    thumb_start = max(0, int(total_dur - 2))
+                    minutes = thumb_start // 60
+                    seconds = thumb_start % 60
+                    chapter_marker = f"\n\n00:00 - Inicio\n{minutes:02d}:{seconds:02d} - Miniatura"
+                    description += chapter_marker
+                    logger.info(f"Marcador de capítulo añadido a la descripción: {minutes:02d}:{seconds:02d}")
+                except Exception as e:
+                    logger.warning(f"No se pudo añadir marcador de capítulo: {e}")
             
             body = {
                 "snippet": {
