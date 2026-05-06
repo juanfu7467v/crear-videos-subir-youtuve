@@ -176,6 +176,11 @@ class YouTubeUploader:
                     logger.info(f"Subiendo video: {int(status.progress() * 100)}%")
             
             video_id = response.get('id')
+            if not video_id:
+                logger.error(f"❌ Error: No se recibió ID del video tras la subida. Respuesta: {response}")
+                return None
+            
+            logger.info(f"✅ Video subido exitosamente. ID: {video_id}")
             
             thumbnail_path = kwargs.get('thumbnail_path')
             if video_id and thumbnail_path:

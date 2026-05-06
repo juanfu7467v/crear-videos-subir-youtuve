@@ -137,7 +137,7 @@ class VideoAutoPipeline:
             tmdb_thumb_success = False
             if "películas" in categoria.lower():
                 thumbnail_search_term = peliprex_movie_name if peliprex_movie_name else topic
-                if self.media_fetcher.generate_thumbnail(thumbnail_search_term, video_title, thumbnail_path, categoria=categoria):
+                if self.media_fetcher.generate_thumbnail(thumbnail_search_term, video_title, thumbnail_path, categoria=categoria, is_short=is_short):
                     logger.info(f"✅ Miniatura de TMDB generada: {thumbnail_path}")
                     tmdb_thumb_success = True
 
@@ -194,14 +194,14 @@ class VideoAutoPipeline:
                 is_kids=is_kids
             )
             
-            logger.info(f"✅ Proceso completado con éxito! URL: {video_url}")
-
-            # --- POLÍTICA DE RESIDUO CERO ---
-            # Solo limpiamos si la subida fue exitosa
-            if video_url:
-                logger.info("⏳ Esperando 15s antes de la limpieza...")
-                time.sleep(15)
+            if video_url and "youtu.be" in video_url:
+                logger.info(f"✅ Subida confirmada con éxito! URL: {video_url}")
+                # --- POLÍTICA DE RESIDUO CERO ---
+                # Solo limpiamos si la subida fue exitosa y tenemos confirmación real
+                logger.info("⏳ Iniciando limpieza de archivos temporales...")
                 self._cleanup_assets(output_dir, temp_assets_dir)
+            else:
+                logger.error("❌ La subida no devolvió una URL válida. Se conservan los archivos para revisión.")
             
             self._stop_keep_alive()
 

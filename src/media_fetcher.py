@@ -230,13 +230,18 @@ class MediaFetcher:
             logger.error(f"Error descargando {url}: {e}")
             return False
 
-    def generate_thumbnail(self, movie_title: str, video_title: str, save_path: str, categoria: str = "general") -> bool:
+    def generate_thumbnail(self, movie_title: str, video_title: str, save_path: str, categoria: str = "general", is_short: bool = True) -> bool:
         """
         Genera una miniatura usando TMDB para películas o Pollinations como fallback.
         """
         try:
             # Fallback a Pollinations para la miniatura
-            width, height = (1080, 1920) # Forzamos resolución vertical para shorts si es necesario
+            if is_short:
+                width, height = (1080, 1920)
+            else:
+                # Mejora solicitada: 1168x784 para videos largos
+                width, height = (1168, 784)
+
             prompt = f"Cinematic movie poster for {movie_title}, {video_title}, high quality, 4k, professional design"
             encoded_prompt = requests.utils.quote(prompt)
             url = f"{POLLINATIONS}/{encoded_prompt}?width={width}&height={height}&model=flux&nologo=true"

@@ -20,7 +20,9 @@ class PipelineHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/keep-alive":
+        if self.path == "/" or self.path == "":
+            self._respond(200, {"status": "ok", "message": "Servidor activo"})
+        elif self.path == "/keep-alive":
             self._respond(200, {"status": "alive"})
         elif self.path == "/status":
             self._respond(200, {"status": "ready", "message": "Servidor pasivo de creación de videos activo"})

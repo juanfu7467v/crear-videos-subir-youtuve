@@ -84,7 +84,8 @@ class ThumbnailGenerator:
                         if is_short:
                             target_w, target_h = 1080, 1920
                         else:
-                            target_w, target_h = 1280, 720
+                            # Mejora solicitada: 1168x784 para videos largos
+                            target_w, target_h = 1168, 784
                             
                         target_ratio = target_w / target_h
                         img_w, img_h = img.size
